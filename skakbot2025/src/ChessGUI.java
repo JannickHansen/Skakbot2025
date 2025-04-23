@@ -1,8 +1,9 @@
+import Board.Board;
 import Pieces.Piece;
+
 import javax.swing.*;
 import javax.swing.border.Border;
 import java.awt.*;
-import java.awt.event.*;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -10,7 +11,7 @@ public class ChessGUI {
     private JFrame frame;
     private JPanel cards;
     private final static String MENU = "Menu";
-    private final static String GAME = "Game";
+    private final static String GAME = "Board";
 
     private JButton[][] buttons = new JButton[8][8];
     private JPanel gamePanel;
@@ -22,8 +23,9 @@ public class ChessGUI {
     private int iconSize = 64;
     private final Map<String, ImageIcon> iconCache = new HashMap<>();
 
-    // For highlighting check and checkmate
     private int checkKingRow = -1, checkKingCol = -1;
+
+    private ChessAI ai = new ChessAI();  // AI instance, no import needed
 
     public ChessGUI() {
         SwingUtilities.invokeLater(this::createAndShowGUI);
@@ -141,7 +143,6 @@ public class ChessGUI {
         boardModel.board[origRow][origCol] = null;
         movingPiece.setPosition(row, col);
 
-        // Fortryd ulovligt skak-træk
         if (boardModel.isInCheck(whiteTurn)) {
             boardModel.board[origRow][origCol] = movingPiece;
             boardModel.board[row][col] = targetPiece;
@@ -155,51 +156,74 @@ public class ChessGUI {
             return;
         }
 
-        // Udfør træk
         whiteTurn = !whiteTurn;
         frame.setTitle("Skakspil – " + (whiteTurn ? "Hvids" : "Sorts") + " tur");
         updateSquare(origRow, origCol);
         updateSquare(row, col);
 
-        // Check og checkmate
         if (boardModel.isInCheck(whiteTurn)) {
-            // Find konge
-            int kingR = -1, kingC = -1;
-            for (int r = 0; r < 8; r++) {
-                for (int c = 0; c < 8; c++) {
-                    Piece p = boardModel.board[r][c];
-                    if (p instanceof Pieces.King && p.isWhite() == whiteTurn) {
-                        kingR = r; kingC = c;
-                        break;
-                    }
-                }
-                if (kingR != -1) break;
-            }
-            checkKingRow = kingR;
-            checkKingCol = kingC;
-            // Highlight check
-            buttons[kingR][kingC].setBorder(BorderFactory.createLineBorder(Color.RED, 4));
-            // Hvis checkmate, ekstra tyk og stop spil
-            if (boardModel.isCheckmate(whiteTurn)) {
-                buttons[kingR][kingC].setBorder(BorderFactory.createLineBorder(Color.RED, 6));
-                gameOver = true;
-                frame.setTitle("Skakspil – " + (whiteTurn ? "Hvid" : "Sort") + " er skakmat");
-                // Vis dialog og vend tilbage til menu
-                JOptionPane.showMessageDialog(frame,
-                        (whiteTurn ? "Hvid" : "Sort") + " er skakmat!",
-                        "Skakmat!", JOptionPane.INFORMATION_MESSAGE);
-                int resp = JOptionPane.showConfirmDialog(frame,
-                        "Vil du vende tilbage til menuen?",
-                        "Skakmat!", JOptionPane.YES_NO_OPTION);
-                if (resp == JOptionPane.YES_OPTION) {
-                    showMenu();
-                }
-            }
+            handleCheckStatus(whiteTurn);
         } else {
             checkKingRow = checkKingCol = -1;
         }
 
         selectedRow = selectedCol = -1;
+
+        if (!whiteTurn && !gameOver) {
+            triggerBlackAIMove();
+        }
+    }
+
+    private void handleCheckStatus(boolean currentPlayerWhite) {
+        int kingR = -1, kingC = -1;
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                Piece p = boardModel.board[r][c];
+                if (p instanceof Pieces.King && p.isWhite() == currentPlayerWhite) {
+                    kingR = r; kingC = c;
+                    break;
+                }
+            }
+            if (kingR != -1) break;
+        }
+        checkKingRow = kingR;
+        checkKingCol = kingC;
+        buttons[kingR][kingC].setBorder(BorderFactory.createLineBorder(Color.RED, 4));
+
+        if (boardModel.isCheckmate(currentPlayerWhite)) {
+            buttons[kingR][kingC].setBorder(BorderFactory.createLineBorder(Color.RED, 6));
+            gameOver = true;
+            frame.setTitle("Skakspil – " + (currentPlayerWhite ? "Hvid" : "Sort") + " er skakmat");
+            JOptionPane.showMessageDialog(frame,
+                    (currentPlayerWhite ? "Hvid" : "Sort") + " er skakmat!",
+                    "Skakmat!", JOptionPane.INFORMATION_MESSAGE);
+            int resp = JOptionPane.showConfirmDialog(frame,
+                    "Vil du vende tilbage til menuen?",
+                    "Skakmat!", JOptionPane.YES_NO_OPTION);
+            if (resp == JOptionPane.YES_OPTION) {
+                showMenu();
+            }
+        }
+    }
+
+    public void triggerBlackAIMove() {
+        ai.calculateAndMakeMoveAsync(boardModel, false, () -> {
+            SwingUtilities.invokeLater(() -> {
+                updateBoard();
+                whiteTurn = true;
+                frame.setTitle("Skakspil – Hvids tur");
+
+                if (boardModel.isInCheck(true)) {
+                    handleCheckStatus(true);
+                } else {
+                    checkKingRow = checkKingCol = -1;
+                }
+            });
+        });
+    }
+
+    public void triggerWhiteAIMove() {
+        // Placeholder for future AI playing as White
     }
 
     private void updateBoard() {
@@ -236,7 +260,6 @@ public class ChessGUI {
             btn.setIcon(null);
             btn.setText("");
         }
-        // Fjern highlight fra tidligere konge, hvis ikke i check længere
         if (r == checkKingRow && c == checkKingCol && !boardModel.isInCheck(whiteTurn)) {
             btn.setBorder(null);
         }
@@ -256,7 +279,6 @@ public class ChessGUI {
     private void clearHighlights() {
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
-                // Behold rødt check/checkmate-ramme
                 if (!gameOver && r == checkKingRow && c == checkKingCol && boardModel.isInCheck(whiteTurn)) continue;
                 buttons[r][c].setBorder(null);
             }
