@@ -18,6 +18,9 @@ class PieceSquareTables{
     // Piece square tables using values from chessprogramming.org.
     // Rather than having separate tables for each player, the flip() method is used to get the square for the white pieces.
     // Improving pawn evaluation is a high priority.
+
+    // TODO: ChatGPT might've hallucinated about how the bitboard is stored; check if these should be mirrored vertically.
+
     int[] pawnTable = {
             0,  0,  0,  0,  0,  0,  0,  0,
             50, 50, 50, 50, 50, 50, 50, 50,
@@ -60,8 +63,9 @@ class PieceSquareTables{
             -5,  0,  0,  0,  0,  0,  0, -5,
             -5,  0,  0,  0,  0,  0,  0, -5,
             0,  0,  0,  5,  5,  0,  0,  0
-    }
+    };
 
+    // TODO: flip this one vertically to account for the asymmetry.
     int[] queenTable = {
             -20,-10,-10, -5, -5,-10,-10,-20,
             -10,  0,  0,  0,  0,  0,  0,-10,
@@ -105,21 +109,45 @@ class PieceSquareTables{
         return square ^ 56;
     }
 
-    int getPieceSquareValue(int piece, int square){
+    public int getPieceSquareValue(int piece, int square){
         // Gets the value of the piece on the square.
         switch (piece) {
-            case WP -> return pawnTable[flip(square)];
-            case WN -> return knightTable[flip(square)];
-            case WB -> return bishopTable[flip(square)];
-            case WR -> return rookTable[flip(square)];
-            case WQ -> return queenTable[flip(square)];
-            case WK -> return kingTableMG[flip(square)];
-            case BP -> return -pawnTable[square];
-            case BN -> return -knightTable[square];
-            case BB -> return -bishopTable[square];
-            case BR -> return -rookTable[square];
-            case BQ -> return -queenTable[square];
-            case BK -> return -kingTableEG[square];
+            case WP -> {
+                return pawnTable[flip(square)];
+            }
+            case WN -> {
+                return knightTable[flip(square)];
+            }
+            case WB -> {
+                return bishopTable[flip(square)];
+            }
+            case WR -> {
+                return rookTable[flip(square)];
+            }
+            case WQ -> {
+                return queenTable[flip(square)];
+            }
+            case WK -> {
+                return kingTableMG[flip(square)];
+            }
+            case BP -> {
+                return -pawnTable[square];
+            }
+            case BN -> {
+                return -knightTable[square];
+            }
+            case BB -> {
+                return -bishopTable[square];
+            }
+            case BR -> {
+                return -rookTable[square];
+            }
+            case BQ -> {
+                return -queenTable[square];
+            }
+            case BK -> {
+                return -kingTableEG[square];
+            }
             default -> throw new IllegalArgumentException("Invalid piece type: " + piece);
         }
     }
