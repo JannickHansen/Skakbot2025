@@ -12,33 +12,40 @@ public class BitboardBoard {
     // That is to say that if we print the board as a binary string, H8 is the first bit printed, and A1 is the last bit printed.
     // Hence the printBitboard() method for when we need to visualise a board.
 
+    // I think the way to do this is to have the board stored here be the 'canon' version that represents the actual game state.
+    // Then we can have the temporary boards be local variables so they can be stored in the stack for speed, and static versions of the methods below can be used to access the lookup tables.
+
     long[] board = new long[15];
 
     // Board[0] is all pieces, Board[1] is white pieces, Board[2] is black pieces.
     // Board[3] to Board[8] are the white pieces in the order pawns, knights, bishops, rooks, queens, kings.
     // Board[9] to Board[14] are the black pieces, same order.
 
-    // Maybe these should just be another bitboard? Probably, yeah, but I'll work that out later.
+    // TODO: move these to another bitboard.
     boolean whiteCastlingRights = true;
     boolean blackCastlingRights = true;
 
     // For generating all of these lookup tables, we just call the methods in LookupTableGeneration.java.
     // This code *would* have had a bunch of helpful comments, but I had to refactor everything twice, so we're going to need to talk Harrison Ford into doing another Indy sequel to find them.
 
-    final long[] kingLookupTable = generateKingLookupTable();
-    final long[] knightLookupTable = generateKnightLookupTable();
-    final long[] bishopMasks = generateBishopMasks();
-    long[][] bishopLookupTable = new long[64][];
-    long[] bishopMagicNumbers = new long[64];
-    int[] bishopShifts = new int[64];
-    final long[] rookMasks = generateRookMasks();
-    long[][] rookLookupTable = new long[64][];
-    long[] rookMagicNumbers = new long[64];
-    int[] rookShifts = new int[64];
+    static final long[] kingLookupTable = generateKingLookupTable();
+    static final long[] knightLookupTable = generateKnightLookupTable();
+    static final long[] bishopMasks = generateBishopMasks();
+    static long[][] bishopLookupTable = new long[64][];
+    static long[] bishopMagicNumbers = new long[64];
+    static int[] bishopShifts = new int[64];
+    static final long[] rookMasks = generateRookMasks();
+    static long[][] rookLookupTable = new long[64][];
+    static long[] rookMagicNumbers = new long[64];
+    static int[] rookShifts = new int[64];
 
 
     public BitboardBoard() {
         initialiseBoard();
+    }
+
+    // I'm not sure if this should just be part of the constructor; will we ever need to create multiple instances of this class?
+    public void generateLookupTables() {
         long[][] bishopBlockers = enumerateAllBlockerBitboards(bishopMasks);
         long[][] rookBlockers = enumerateAllBlockerBitboards(rookMasks);
 
@@ -114,7 +121,7 @@ public class BitboardBoard {
     // Remember that board[0] is all pieces, board[1] is white pieces, and board[2] is black pieces.
     // Board[3] is white pawns, and board[9] is black pawns.
 
-    public long whitePawnMoves() {
+    public static long whitePawnMoves(long[] board) {
         long moves = 0L;
         // Single-square moves.
         moves |= (board[3] << 8) & ~board[0];
@@ -123,7 +130,7 @@ public class BitboardBoard {
         return moves;
     }
 
-    public long blackPawnMoves() {
+    public static long blackPawnMoves(long[] board) {
         long moves = 0L;
         // Single-square moves.
         moves |= (board[9] >> 8) & ~board[0];
@@ -132,7 +139,7 @@ public class BitboardBoard {
         return moves;
     }
 
-    public long whitePawnCaptures() {
+    public static long whitePawnCaptures(long[] board) {
         long captures = 0L;
         // Capture left.
         captures |= (board[3] << 7) & board[2] & 0xFEFEFEFEFEFEFEFEL;
@@ -141,7 +148,7 @@ public class BitboardBoard {
         return captures;
     }
 
-    public long blackPawnCaptures() {
+    public static long blackPawnCaptures(long[] board) {
         long captures = 0L;
         // Capture left.
         captures |= (board[9] >> 7) & board[1] & 0xFEFEFEFEFEFEFEFEL;
@@ -162,19 +169,19 @@ public class BitboardBoard {
 
     // Since there's only ever one king, we can just use the LSB to find the king's position and save a little time with parameter passing.
 
-    public long whiteKingMoves() {
+    public static long whiteKingMoves(long[] board) {
         return kingLookupTable[Long.numberOfTrailingZeros(board[8])] & ~board[0];
     }
 
-    public long whiteKingCaptures() {
+    public static long whiteKingCaptures(long[] board) {
         return kingLookupTable[Long.numberOfTrailingZeros(board[8])] & board[2];
     }
 
-    public long blackKingMoves() {
+    public static long blackKingMoves(long[] board) {
         return kingLookupTable[Long.numberOfTrailingZeros(board[14])] & ~board[0];
     }
 
-    public long blackKingCaptures() {
+    public static long blackKingCaptures(long[] board) {
         return kingLookupTable[Long.numberOfTrailingZeros(board[14])] & board[1];
     }
 
@@ -186,16 +193,16 @@ public class BitboardBoard {
     // There can be multiple knights, so we need to pass the knight's position as a parameter.
     // That can just be an integer; no need to worry about trailing zeros here.
 
-    public long knightMoves(int knight) {
-        return knightLookupTable[knight] & ~board[0];
+    public static long knightMoves(int square, long[] board) {
+        return knightLookupTable[square] & ~board[0];
     }
 
-    public long whiteKnightCaptures(int knight) {
-        return knightLookupTable[knight] & board[2];
+    public static long whiteKnightCaptures(int square, long[] board) {
+        return knightLookupTable[square] & board[2];
     }
 
-    public long blackKnightCaptures(int knight) {
-        return knightLookupTable[knight] & board[1];
+    public static long blackKnightCaptures(int square, long[] board) {
+        return knightLookupTable[square] & board[1];
     }
 
     // #########################################################################
@@ -211,15 +218,15 @@ public class BitboardBoard {
     // when multiplied by the occupied squares in the mask and shifted, becomes a unique index for the attack table.
     // Do I, strictly speaking, *understand* this? Vaguely at best, but I tested it, and it works, so I'm a happy man.
 
-    public long bishopMoves(int square) {
+    public static long bishopMoves(int square, long[] board) {
         return bishopLookupTable[square][(int)((board[0] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square])];
     }
 
-    public long whiteBishopCaptures(int square) {
+    public static long whiteBishopCaptures(int square, long[] board) {
         return bishopLookupTable[square][(int)((board[0] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square])] & board[2];
     }
 
-    public long blackBishopCaptures(int square) {
+    public static long blackBishopCaptures(int square, long[] board) {
         return bishopLookupTable[square][(int)((board[0] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square])] & board[1];
     }
 
@@ -228,15 +235,15 @@ public class BitboardBoard {
 
     // Second verse, same as the first.
 
-    public long rookMoves(int square) {
+    public static long rookMoves(int square, long[] board) {
         return rookLookupTable[square][(int)((board[0] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square])];
     }
 
-    public long whiteRookCaptures(int square) {
+    public static long whiteRookCaptures(int square, long[] board) {
         return rookLookupTable[square][(int)((board[0] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square])] & board[2];
     }
 
-    public long blackRookCaptures(int square) {
+    public static long blackRookCaptures(int square, long[] board) {
         return rookLookupTable[square][(int)((board[0] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square])] & board[1];
     }
 
@@ -246,19 +253,25 @@ public class BitboardBoard {
     // Thankfully, this one's easy when the lookup tables are already generated.
     // We simply get the rook and bishop moves for the square and combine them with a bitwise 'OR'.
 
-    public long queenMoves(int square) {
+    public static long queenMoves(int square, long[] board) {
         return rookLookupTable[square][(int)((board[0] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square])] |
                 bishopLookupTable[square][(int)((board[0] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square])];
     }
 
-    public long whiteQueenCaptures(int square) {
+    public static long whiteQueenCaptures(int square, long[] board) {
         return (rookLookupTable[square][(int)((board[0] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square])] |
                 bishopLookupTable[square][(int)((board[0] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square])]) & board[2];
     }
 
-    public long blackQueenCaptures(int square) {
+    public static long blackQueenCaptures(int square, long[] board) {
         return (rookLookupTable[square][(int)((board[0] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square])] |
                 bishopLookupTable[square][(int)((board[0] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square])]) & board[1];
     }
+
+    // #########################################################################
+    // CHECK CHECKS (PUN INTENDED).
+
+    // TODO: add check check.
+    // Although... Is that necessary if the engine will always prioritise not losing the king, anyway?
 
 }
