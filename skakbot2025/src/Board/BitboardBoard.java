@@ -271,7 +271,19 @@ public class BitboardBoard {
     // #########################################################################
     // CHECK CHECKS (PUN INTENDED).
 
-    // TODO: add check check.
-    // Although... Is that necessary if the engine will always prioritise not losing the king, anyway?
+    public static boolean isInCheck(long[] board, boolean white) {
+        // First we find the king's position.
+        int kingSquare = Long.numberOfTrailingZeros(board[white ? 8 : 14]);
+
+        // Then we check from the king's square to all the squares that can attack it and see if any of them are occupied by an enemy piece.
+        // For obvious reasons, we don't need to check the enemy king's moves.
+
+        // We check whether any pawn captures for the opposite colour overlap with the king's position, then whether any non-king piece in the king's position can see a corresponding piece of the opposite colour.
+        return ((white ? blackPawnCaptures(board) : whitePawnCaptures(board)) & board[white ? 8 : 14]) != 0L ||
+                ((white ? whiteKnightCaptures(kingSquare, board) : blackKnightCaptures(kingSquare, board)) & board[white ? 10 : 4]) != 0L ||
+                ((white ? whiteBishopCaptures(kingSquare, board) : blackBishopCaptures(kingSquare, board)) & (board[white ? 11 : 5] | board[white ? 13 : 7])) != 0L ||
+                ((white ? whiteRookCaptures(kingSquare, board) : blackRookCaptures(kingSquare, board)) & (board[white ? 12 : 6] | board[white ? 13 : 7])) != 0L;
+
+    }
 
 }
