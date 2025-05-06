@@ -135,20 +135,6 @@ public class ChessAI {
         return moves;
     }
 
-    // Making a large number of Move objects is inefficient, but we can encode the data into a 32-bit integer instead.
-    private int encodeMove(int from, int to, int piece, int captured, int promotion, boolean isEP, boolean isCastle) {
-        return (from) | (to << 6) | (piece << 12) | (captured << 16) | (promotion << 20) | ((isEP ? 1 : 0) << 24) | ((isCastle ? 1 : 0) << 25);
-    }
-
-    // Apparently these are efficient enough that there's no advantage to hardcoding the logic.
-    public static int getFrom(int move)       { return move & 0x3F; }  // Bits 0-5
-    public static int getTo(int move)         { return (move >>> 6) & 0x3F; }  // Bits 6-11
-    public static int getPiece(int move)      { return (move >>> 12) & 0xF; }  // Bits 12-15
-    public static int getCaptured(int move)   { return (move >>> 16) & 0xF; }  // Bits 16-19
-    public static int getPromotion(int move)  { return (move >>> 20) & 0xF; }  // Bits 20-23
-    public static boolean isEnPassant(int move) { return ((move >>> 24) & 1) != 0; }  // Bit 24
-    public static boolean isCastling(int move)  { return ((move >>> 25) & 1) != 0; }  // Bit 25
-
     private void makeMove(Board board, Move move) {
         board.board[move.toRow][move.toCol] = move.movedPiece;
         board.board[move.fromRow][move.fromCol] = null;
