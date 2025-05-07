@@ -5,31 +5,22 @@ import java.util.*;
 public class ChessAI {
     private static final int MAX_DEPTH = 10;
     private static final long TIME_LIMIT = 14_900_000_000L; // 15 seconds
-    private static final int ASPIRATION_WINDOW_VALUE = 100; // 50 to 100 is normal, if you want consistently 5 depth and try to avoid depth 4, go 150
+    private static final int ASPIRATION_WINDOW_VALUE = 100; // ±100 cp
 
-    // Center control bonus table
+    // Score for checkmate
+    private static final int MATE_SCORE = 1_000_000;
+
+    // Center-control bonus table
     private static final int[][] CENTER_CONTROL_BONUS = {
-            {0, 0, 5, 5, 5, 5, 0, 0},
-            {0, 5,10,10,10,10, 5, 0},
-            {5,10,15,20,20,15,10, 5},
-            {5,10,20,25,25,20,10, 5},
-            {5,10,20,25,25,20,10, 5},
-            {5,10,15,20,20,15,10, 5},
-            {0, 5,10,10,10,10, 5, 0},
-            {0, 0, 5, 5, 5, 5, 0, 0},
+            {0,0,5,5,5,5,0,0},
+            {0,5,10,10,10,10,5,0},
+            {5,10,15,20,20,15,10,5},
+            {5,10,20,25,25,20,10,5},
+            {5,10,20,25,25,20,10,5},
+            {5,10,15,20,20,15,10,5},
+            {0,5,10,10,10,10,5,0},
+            {0,0,5,5,5,5,0,0},
     };
-
-    private int getPieceValue(Piece p) {
-        return switch (p.getClass().getSimpleName().toLowerCase()) {
-            case "pawn"   -> 100;
-            case "knight" -> 320;
-            case "bishop" -> 330;
-            case "rook"   -> 500;
-            case "queen"  -> 900;
-            case "king"   -> 20000;
-            default       -> 0;
-        };
-    }
 
     // Ordering bonuses
     private static final int PV_BONUS      = 1_000_000;
@@ -38,7 +29,8 @@ public class ChessAI {
 
     private final Move[][] killerMoves       = new Move[2][MAX_DEPTH];
     private final int[][]   historyHeuristic = new int[64][64];
-    private long cutoffCount = 0;
+
+    private long cutoffCount      = 0;
     private int  lastDepthReached = 0;
 
     public static class Move {
@@ -50,8 +42,8 @@ public class ChessAI {
             movedPiece    = m;
             capturedPiece = c;
         }
-        public int fromIndex() { return fromRow * 8 + fromCol; }
-        public int toIndex()   { return toRow   * 8 + toCol;   }
+        public int fromIndex() { return fromRow*8 + fromCol; }
+        public int toIndex()   { return toRow*8   + toCol;   }
     }
 
     public void calculateAndMakeMoveAsync(Board board, boolean isWhite, Runnable onMoveComplete) {
@@ -59,52 +51,39 @@ public class ChessAI {
             Move best = getBestMoveWithTimeout(board, isWhite, TIME_LIMIT);
             if (best != null) {
                 makeMove(board, best, isWhite);
-                System.out.println("α/β cutoffs: " + cutoffCount + ", Depth finished: " + lastDepthReached
-                );
+                System.out.println("α/β cutoffs: " + cutoffCount +
+                        ", Depth finished: " + lastDepthReached);
             }
-            if (onMoveComplete != null) {
-                onMoveComplete.run();
-            }
+            if (onMoveComplete != null) onMoveComplete.run();
         }).start();
     }
 
-    // Iterative deepening + timeout
+    // Iterative deepening + aspiration + timeout
     private Move getBestMoveWithTimeout(Board board, boolean isWhite, long timeLimit) {
         long start = System.nanoTime();
         cutoffCount      = 0;
         lastDepthReached = 0;
 
-        Move bestSoFar = null;
-        Move prevPV    = null;
+        Move bestSoFar = null, prevPV = null;
         int   lastScore = 0;
 
         for (int depth = 1; depth <= MAX_DEPTH; depth++) {
             if (System.nanoTime() - start >= timeLimit) break;
 
-            // 1) set up aspiration window
             int alpha, beta;
             if (depth == 1) {
                 alpha = Integer.MIN_VALUE;
                 beta  = Integer.MAX_VALUE;
             } else {
-                int window = ASPIRATION_WINDOW_VALUE;
-                alpha = lastScore - window;
-                beta  = lastScore + window;
+                alpha = lastScore - ASPIRATION_WINDOW_VALUE;
+                beta  = lastScore + ASPIRATION_WINDOW_VALUE;
             }
 
-            // 2) check with aspiration window
             ScoredMove sm = minimaxWithTimeout(
-                    board, depth,
-                    alpha, beta,
-                    isWhite, start, timeLimit,
-                    prevPV
+                    board, depth, alpha, beta, isWhite,
+                    start, timeLimit, prevPV
             );
-
-            // 3) if it “failed” outside the window, re-search full
-            if (sm != null
-                    && (sm.score <= alpha || sm.score >= beta)
-            ) {
-                // window too small → full re-search
+            if (sm != null && (sm.score <= alpha || sm.score >= beta)) {
                 sm = minimaxWithTimeout(
                         board, depth,
                         Integer.MIN_VALUE, Integer.MAX_VALUE,
@@ -112,19 +91,23 @@ public class ChessAI {
                         prevPV
                 );
             }
+            if (sm == null) break;          // timed out
 
-            if (sm == null) break;
-            lastScore = sm.score;
-            lastDepthReached = depth;
+            lastScore        = sm.score;
+            lastDepthReached = depth;       // completed
 
             if (sm.move != null) {
                 bestSoFar = sm.move;
-                prevPV = sm.move;
+                prevPV    = sm.move;
+                // if mate found for this side, stop deeper search
+                if ((isWhite  && sm.score ==  MATE_SCORE) ||
+                        (!isWhite && sm.score == -MATE_SCORE)) {
+                    break;
+                }
             }
         }
         return bestSoFar;
     }
-
 
     private static class ScoredMove {
         final Move move;
@@ -132,7 +115,7 @@ public class ChessAI {
         ScoredMove(Move m, int s) { move = m; score = s; }
     }
 
-    // Minimax + alpha-beta + timeout
+    // Minimax + alpha-beta + timeout + mate detection + early mate cut-off
     private ScoredMove minimaxWithTimeout(
             Board board,
             int depth,
@@ -150,22 +133,31 @@ public class ChessAI {
 
         List<Move> moves = generateAllMoves(board, maxPlayer, depth, pv);
         if (moves.isEmpty()) {
-            return new ScoredMove(null, evaluateBoard(board));
+            if (board.isCheckmate(maxPlayer)) {
+                int v = maxPlayer ? -MATE_SCORE : +MATE_SCORE;
+                return new ScoredMove(null, v);
+            } else {
+                return new ScoredMove(null, 0);
+            }
         }
 
-        Move bestMove = null;
-
         if (maxPlayer) {
-            int maxEval = Integer.MIN_VALUE;
+            Move bestMove = null;
+            int   maxEval = Integer.MIN_VALUE;
             for (Move m : moves) {
                 if (System.nanoTime() - start >= timeLimit) return null;
                 makeMove(board, m, true);
                 ScoredMove child = minimaxWithTimeout(
-                        board, depth - 1, alpha, beta, false,
-                        start, timeLimit, null
+                        board, depth - 1, alpha, beta,
+                        false, start, timeLimit, null
                 );
                 undoMove(board, m);
                 if (child == null) return null;
+
+                // early mate cut-off
+                if (child.score == MATE_SCORE) {
+                    return new ScoredMove(m, MATE_SCORE);
+                }
 
                 if (child.score > maxEval) {
                     maxEval  = child.score;
@@ -180,18 +172,23 @@ public class ChessAI {
                 recordHistory(m, depth);
             }
             return new ScoredMove(bestMove, maxEval);
-
         } else {
-            int minEval = Integer.MAX_VALUE;
+            Move bestMove = null;
+            int   minEval = Integer.MAX_VALUE;
             for (Move m : moves) {
                 if (System.nanoTime() - start >= timeLimit) return null;
                 makeMove(board, m, false);
                 ScoredMove child = minimaxWithTimeout(
-                        board, depth - 1, alpha, beta, true,
-                        start, timeLimit, null
+                        board, depth - 1, alpha, beta,
+                        true, start, timeLimit, null
                 );
                 undoMove(board, m);
                 if (child == null) return null;
+
+                // early mate cut-off
+                if (child.score == -MATE_SCORE) {
+                    return new ScoredMove(m, -MATE_SCORE);
+                }
 
                 if (child.score < minEval) {
                     minEval   = child.score;
@@ -222,13 +219,13 @@ public class ChessAI {
     }
 
     /**
-     * Multi-tier move ordering:
-     * 1) PV move (root only)
-     * 2) MVV-LVA captures
-     * 3) Checks
-     * 4) Killer moves at this depth
-     * 5) History heuristic
-     * 6) Center control
+     * Move‐ordering tiers:
+     * 1) root PV
+     * 2) MVV‐LVA captures
+     * 3) checks
+     * 4) killer moves
+     * 5) history heuristic
+     * 6) center control
      */
     public List<Move> generateAllMoves(
             Board board,
@@ -238,31 +235,28 @@ public class ChessAI {
     ) {
         List<Move> moves = new ArrayList<>();
         Map<Move,Integer> scores = new HashMap<>();
-        Piece[][] b = board.board;
+        Piece[][] boardArray = board.board;
 
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
-                Piece p = b[r][c];
+                Piece p = boardArray[r][c];
                 if (p == null || p.isWhite() != isWhite) continue;
                 for (int tr = 0; tr < 8; tr++) {
                     for (int tc = 0; tc < 8; tc++) {
-                        if (!p.isValidMove(tr, tc, b)) continue;
-                        Piece cap = b[tr][tc];
+                        if (!p.isValidMove(tr, tc, boardArray)) continue;
+                        Piece cap = boardArray[tr][tc];
                         Move m = new Move(r, c, tr, tc, p, cap);
                         if (!makeMove(board, m, isWhite)) continue;
 
                         int sc = 0;
-                        if (pv != null && m == pv) {
-                            sc += PV_BONUS;
-                        }
-                        if (cap != null) {
-                            sc += 10_000 + getPieceValue(cap) - getPieceValue(p);
-                        } else if (board.isInCheck(!isWhite)) {
-                            sc += 5_000;
-                        }
+                        if (pv != null && m == pv) sc += PV_BONUS;
+                        if (cap != null) sc += 10_000 + getPieceValue(cap) - getPieceValue(p);
+                        else if (board.isInCheck(!isWhite)) sc += 5_000;
+
                         int d = depth - 1;
                         if (killerMoves[0][d] == m) sc += KILLER1_BONUS;
                         if (killerMoves[1][d] == m) sc += KILLER2_BONUS;
+
                         sc += historyHeuristic[m.fromIndex()][m.toIndex()];
                         sc += CENTER_CONTROL_BONUS[tr][tc];
 
@@ -274,7 +268,7 @@ public class ChessAI {
             }
         }
 
-        moves.sort((m1, m2) -> scores.get(m2) - scores.get(m1));
+        moves.sort((a, b) -> scores.get(b) - scores.get(a));
         return moves;
     }
 
@@ -300,6 +294,7 @@ public class ChessAI {
         m.movedPiece.setPosition(m.fromRow, m.fromCol);
     }
 
+    // Static evaluation
     private int evaluateBoard(Board board) {
         int score = 0;
         Piece[][] b = board.board;
@@ -314,5 +309,18 @@ public class ChessAI {
             }
         }
         return score;
+    }
+
+    // Piece base values
+    private int getPieceValue(Piece p) {
+        return switch (p.getClass().getSimpleName().toLowerCase()) {
+            case "pawn"   -> 100;
+            case "knight" -> 320;
+            case "bishop" -> 330;
+            case "rook"   -> 500;
+            case "queen"  -> 900;
+            case "king"   -> 20000;
+            default       -> 0;
+        };
     }
 }
