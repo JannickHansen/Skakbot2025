@@ -4,9 +4,8 @@ import javax.swing.*;
 
 public abstract class Piece {
     protected boolean isWhite;
-    protected int row, col;
-    protected String name;
-    public int value;
+    protected int row;
+    protected int col;
 
     public Piece(boolean isWhite, int row, int col) {
         this.isWhite = isWhite;
@@ -14,15 +13,25 @@ public abstract class Piece {
         this.col = col;
     }
 
-    public boolean isWhite() {
-        return isWhite;
-    }
-
-    public void setPosition(int row, int col) {
-        this.row = row;
-        this.col = col;
-    }
-
+    public abstract ImageIcon getIcon();
     public abstract boolean isValidMove(int newRow, int newCol, Piece[][] board);
-    public abstract ImageIcon getIcon(); // bruges af GUI'en til at vise billedet
+
+    /**
+     * Opdaterer kun koordinater – bruges til både simulation og rigtige træk.
+     */
+    public void setPosition(int newRow, int newCol) {
+        this.row = newRow;
+        this.col = newCol;
+    }
+
+    /**
+     * Rykker brikken som et “rigtigt” træk – sætter moved-flag i underklasser.
+     */
+    public void move(int newRow, int newCol) {
+        setPosition(newRow, newCol);
+    }
+
+    public boolean isWhite() { return isWhite; }
+    public int getRow()    { return row; }
+    public int getCol()    { return col; }
 }

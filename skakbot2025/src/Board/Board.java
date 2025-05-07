@@ -41,6 +41,57 @@ public class Board {
     /**
      * Check om den angivne farves konge er i skak.
      */
+
+    public boolean isSquareUnderAttack(int targetRow, int targetCol, boolean byWhite) {
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                Piece p = board[r][c];
+                if (p != null && p.isWhite() == byWhite) {
+                    if (p.isValidMove(targetRow, targetCol, board)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    public boolean canCastle(boolean white, int direction) {
+        int row     = white ? 7 : 0;
+        int kingCol = 4;
+        int rookCol = (direction == 1 ? 7 : 0);
+
+        if (!(board[row][kingCol] instanceof King) || !(board[row][rookCol] instanceof Rook))
+            return false;
+        King k = (King) board[row][kingCol];
+        Rook r = (Rook) board[row][rookCol];
+
+
+        for (int c = kingCol + direction; c != rookCol; c += direction) {
+            System.out.println("  board[" + row + "][" + c + "] = " + board[row][c]);
+        }
+
+        if (k.hasMoved() || r.hasMoved()) return false;
+
+        for (int c = kingCol + direction; c != rookCol; c += direction) {
+            if (board[row][c] != null) return false;
+        }
+
+        int startCol = kingCol;
+        int middleCol = kingCol + direction;
+        int endCol = kingCol + 2 * direction;
+
+
+        if (isSquareUnderAttack(row, startCol, !white) ||
+                isSquareUnderAttack(row, middleCol, !white) ||
+                isSquareUnderAttack(row, endCol, !white)) {
+            return false;
+        }
+
+        return true;
+    }
+
+
     public boolean isInCheck(boolean white) {
         // Find kongens position
         int kingRow = -1, kingCol = -1;
