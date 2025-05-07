@@ -24,6 +24,7 @@ public class BitboardBoard {
     // Board[9] to Board[14] are the black pieces, same order.
 
     // TODO: move these to another bitboard.
+    // TODO: create a bitboard that stores data for which pieces can be captured by en passant (low priority).
     boolean whiteCastlingRights = true;
     boolean blackCastlingRights = true;
 
@@ -141,22 +142,20 @@ public class BitboardBoard {
         return moves;
     }
 
-    public static long whitePawnCaptures(long[] board) {
-        long captures = 0L;
-        // Capture left.
-        captures |= (board[3] << 7) & board[2] & 0xFEFEFEFEFEFEFEFEL;
-        // Capture right.
-        captures |= (board[3] << 9) & board[2] & 0x7F7F7F7F7F7F7F7FL;
-        return captures;
+    public static long whitePawnRightCaptures(long[] board) {
+        return (board[3] << 9) & board[2] & 0x7F7F7F7F7F7F7F7FL;
     }
 
-    public static long blackPawnCaptures(long[] board) {
-        long captures = 0L;
-        // Capture left.
-        captures |= (board[9] >> 7) & board[1] & 0xFEFEFEFEFEFEFEFEL;
-        // Capture right.
-        captures |= (board[9] >> 9) & board[1] & 0x7F7F7F7F7F7F7F7FL;
-        return captures;
+    public static long whitePawnLeftCaptures(long[] board){
+        return (board[3] << 7) & board[2] &0xFEFEFEFEFEFEFEFEL;
+    }
+
+    public static long blackPawnRightCaptures(long[] board) {
+        return (board[9] >> 9) & board[1] & 0x7F7F7F7F7F7F7F7FL;
+    }
+
+    public static long blackPawnLeftCaptures(long[] board) {
+        return (board[9] >> 7) & board[1] & 0xFEFEFEFEFEFEFEFEL;
     }
 
     // #########################################################################
@@ -281,7 +280,8 @@ public class BitboardBoard {
         // For obvious reasons, we don't need to check the enemy king's moves.
 
         // We check whether any pawn captures for the opposite colour overlap with the king's position, then whether any non-king piece in the king's position can see a corresponding piece of the opposite colour.
-        return ((white ? blackPawnCaptures(board) : whitePawnCaptures(board)) & board[white ? 8 : 14]) != 0L ||
+        return ((white ? blackPawnRightCaptures(board) : whitePawnRightCaptures(board)) & board[white ? 8 : 14]) != 0L ||
+                ((white ? blackPawnLeftCaptures(board) : whitePawnLeftCaptures(board)) & board[white ? 8 : 14]) != 0L ||
                 ((white ? whiteKnightCaptures(kingSquare, board) : blackKnightCaptures(kingSquare, board)) & board[white ? 10 : 4]) != 0L ||
                 ((white ? whiteBishopCaptures(kingSquare, board) : blackBishopCaptures(kingSquare, board)) & (board[white ? 11 : 5] | board[white ? 13 : 7])) != 0L ||
                 ((white ? whiteRookCaptures(kingSquare, board) : blackRookCaptures(kingSquare, board)) & (board[white ? 12 : 6] | board[white ? 13 : 7])) != 0L;
@@ -347,11 +347,20 @@ public class BitboardBoard {
         // This method doesn't have any logic for determining which moves are best, except that captures are always at the start of the array and therefore examined first.
 
         // Pawn captures.
-        long pawnCaptures = white ? whitePawnCaptures(board) : blackPawnCaptures(board);
-        for (int i =  Long.bitCount(pawnCaptures); i > 0; i--) {
-            int square = Long.numberOfTrailingZeros(pawnCaptures);
-            // TODO: add logic.
-            pawnCaptures &= pawnCaptures - 1;
+        long pawnRightCaptures = white ? whitePawnRightCaptures(board) : blackPawnRightCaptures(board);
+        long pawnLeftCaptures = white ? whitePawnLeftCaptures(board) : blackPawnLeftCaptures(board);
+        for (int i =  Long.bitCount(pawnRightCaptures); i > 0; i--) {
+            int targetSquare = Long.numberOfTrailingZeros(pawnRightCaptures);
+            // TODO: create promotion logic.
+            moves[moveCount++] = encodeMove((white ? targetSquare-9 : targetSquare+9), targetSquare, 0, getPieceType(targetSquare, board, white), 0, false, false);
+            pawnRightCaptures &= pawnRightCaptures - 1;
+        }
+
+        for (int i = Long.bitCount(pawnLeftCaptures); i > 0; i--) {
+            int targetSquare = Long.numberOfTrailingZeros(pawnLeftCaptures);
+            // TODO: add promotion logic here once created.
+            moves[moveCount++] = encodeMove((white ? targetSquare-7 : targetSquare+7), targetSquare, 0, getPieceType(targetSquare, board, white), 0, false, false);
+            pawnLeftCaptures &= pawnLeftCaptures - 1;
         }
 
         // Knight captures.
