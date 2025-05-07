@@ -492,4 +492,39 @@ public class BitboardBoard {
         return Arrays.copyOf(moves, moveCount);
     }
 
+    // ###########################################################################
+    // METHODS FOR MAKING MOVES.
+
+    // Important to keep in mind: XOR (^) toggles bits, moving the piece, while AND (&) clears the bits, removing the piece.
+    // The getPiece() method returns 1 for pawns, 2 for knights, 3 for bishops, 4 for rooks, 5 for queens, and 6 for kings.
+    // We need to add 2 to the piece type to get the index of the board for white pieces (3-8), and 8 to get the index for black pieces (9-14).
+
+    // Fun fact: I originally made makeMove() and undoMove() methods, but then I realised that XOR is reversible, so it was just two identical methods.
+    // I know that's not *surprising*, but I just blew my own mind.
+    public static long[] makeOrUndoMove(long[] board, int move, boolean white) {
+        if (white) {
+            board[1] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the white pieces.
+            board[getPiece(move)+2] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the piece type.
+            if (getCaptured(move) != 0) {
+                board[0] ^= (1L << getFrom(move)); // Remove the moving piece from the 'all pieces' board, since it's now on the target square.
+                board[2] ^= (1L << getTo(move)); // Remove the captured piece from the 'black pieces' board.
+                board[getCaptured(move)+8] ^= (1L << getTo(move)); // Remove the captured piece from the specific piece board.
+            } else {
+                board[0] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Move the piece on the 'all pieces' board.
+            }
+        } else {
+            board[2] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the black pieces.
+            board[getPiece(move)+8] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the piece type.
+            if (getCaptured(move) != 0) {
+                board[0] ^= (1L << getFrom(move)); // Remove the moving piece from the 'all pieces' board, since it's now on the target square.
+                board[1] ^= (1L << getTo(move)); // Remove the captured piece from the 'white pieces' board.
+                board[getCaptured(move)+2] ^= (1L << getTo(move)); // Remove the captured piece from the specific piece board.
+            } else {
+                board[0] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Move the piece on the 'all pieces' board.
+            }
+        }
+
+        return board;
+    }
+
 }
