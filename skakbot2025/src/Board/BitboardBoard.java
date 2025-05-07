@@ -506,21 +506,21 @@ public class BitboardBoard {
             board[1] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the white pieces.
             board[getPiece(move)+2] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the piece type.
             if (getCaptured(move) != 0) {
-                board[0] ^= (1L << getFrom(move)); // Remove the moving piece from the 'all pieces' board, since it's now on the target square.
-                board[2] ^= (1L << getTo(move)); // Remove the captured piece from the 'black pieces' board.
-                board[getCaptured(move)+8] ^= (1L << getTo(move)); // Remove the captured piece from the specific piece board.
+                board[0] ^= (1L << getFrom(move)); // Update the 'from' square on the 'all pieces' board.
+                board[2] ^= (1L << getTo(move)); // Update the 'to' square on the 'black pieces' board.
+                board[getCaptured(move)+8] ^= (1L << getTo(move)); // Update the captured piece on the 'black pieces' board.
             } else {
-                board[0] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Move the piece on the 'all pieces' board.
+                board[0] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the 'all pieces' board.
             }
         } else {
             board[2] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the black pieces.
             board[getPiece(move)+8] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the piece type.
             if (getCaptured(move) != 0) {
-                board[0] ^= (1L << getFrom(move)); // Remove the moving piece from the 'all pieces' board, since it's now on the target square.
-                board[1] ^= (1L << getTo(move)); // Remove the captured piece from the 'white pieces' board.
-                board[getCaptured(move)+2] ^= (1L << getTo(move)); // Remove the captured piece from the specific piece board.
+                board[0] ^= (1L << getFrom(move)); // Update the 'from' square on the 'all pieces' board.
+                board[1] ^= (1L << getTo(move)); // Update the 'to' square on the 'white pieces' board.
+                board[getCaptured(move)+2] ^= (1L << getTo(move)); // Update the captured piece on the 'white pieces' board.
             } else {
-                board[0] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Move the piece on the 'all pieces' board.
+                board[0] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the 'all pieces' board.
             }
         }
 
