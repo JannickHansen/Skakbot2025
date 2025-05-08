@@ -186,6 +186,10 @@ public class ChessGUI {
             }
             return;
         }
+        if (!movingPiece.isValidMove(row, col, boardModel.board)) {
+            selectedRow = selectedCol = -1;
+            return;
+        }
 
         int origRow = selectedRow, origCol = selectedCol;
         Piece target = boardModel.board[row][col];

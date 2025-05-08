@@ -4,7 +4,7 @@ import java.util.*;
 
 public class ChessAI {
     private static final int MAX_DEPTH = 10;
-    private static final long TIME_LIMIT = 3_000_000_000L; // 15 seconds
+    private static final long TIME_LIMIT = 14_950_000_000L; // 15 seconds
     private static final int ASPIRATION_WINDOW_VALUE = 100; // 50 to 100 is normal, if you want consistently 5 depth and try to avoid depth 4, go 150
 
     // Center control bonus table

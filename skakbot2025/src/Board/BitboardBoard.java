@@ -1,5 +1,7 @@
 package Board;
 
+import java.util.Arrays;
+
 import static BitboardMoveGen.LookupTableGeneration.*;
 
 public class BitboardBoard {
@@ -12,33 +14,41 @@ public class BitboardBoard {
     // That is to say that if we print the board as a binary string, H8 is the first bit printed, and A1 is the last bit printed.
     // Hence the printBitboard() method for when we need to visualise a board.
 
+    // I think the way to do this is to have the board stored here be the 'canon' version that represents the actual game state.
+    // Then we can have the temporary boards be local variables so they can be stored in the stack for speed, and static versions of the methods below can be used to access the lookup tables.
+
     long[] board = new long[15];
 
     // Board[0] is all pieces, Board[1] is white pieces, Board[2] is black pieces.
     // Board[3] to Board[8] are the white pieces in the order pawns, knights, bishops, rooks, queens, kings.
     // Board[9] to Board[14] are the black pieces, same order.
 
-    // Maybe these should just be another bitboard? Probably, yeah, but I'll work that out later.
+    // TODO: move these to another bitboard.
+    // TODO: create a bitboard that stores data for which pieces can be captured by en passant (low priority).
     boolean whiteCastlingRights = true;
     boolean blackCastlingRights = true;
 
     // For generating all of these lookup tables, we just call the methods in LookupTableGeneration.java.
     // This code *would* have had a bunch of helpful comments, but I had to refactor everything twice, so we're going to need to talk Harrison Ford into doing another Indy sequel to find them.
 
-    final long[] kingLookupTable = generateKingLookupTable();
-    final long[] knightLookupTable = generateKnightLookupTable();
-    final long[] bishopMasks = generateBishopMasks();
-    long[][] bishopLookupTable = new long[64][];
-    long[] bishopMagicNumbers = new long[64];
-    int[] bishopShifts = new int[64];
-    final long[] rookMasks = generateRookMasks();
-    long[][] rookLookupTable = new long[64][];
-    long[] rookMagicNumbers = new long[64];
-    int[] rookShifts = new int[64];
+    static final long[] kingLookupTable = generateKingLookupTable();
+    static final long[] knightLookupTable = generateKnightLookupTable();
+    static final long[] bishopMasks = generateBishopMasks();
+    static long[][] bishopLookupTable = new long[64][];
+    static long[] bishopMagicNumbers = new long[64];
+    static int[] bishopShifts = new int[64];
+    static final long[] rookMasks = generateRookMasks();
+    static long[][] rookLookupTable = new long[64][];
+    static long[] rookMagicNumbers = new long[64];
+    static int[] rookShifts = new int[64];
 
 
     public BitboardBoard() {
         initialiseBoard();
+    }
+
+    // I'm not sure if this should just be part of the constructor; will we ever need to create multiple instances of this class?
+    public void generateLookupTables() {
         long[][] bishopBlockers = enumerateAllBlockerBitboards(bishopMasks);
         long[][] rookBlockers = enumerateAllBlockerBitboards(rookMasks);
 
@@ -114,7 +124,7 @@ public class BitboardBoard {
     // Remember that board[0] is all pieces, board[1] is white pieces, and board[2] is black pieces.
     // Board[3] is white pawns, and board[9] is black pawns.
 
-    public long whitePawnMoves() {
+    public static long whitePawnMoves(long[] board) {
         long moves = 0L;
         // Single-square moves.
         moves |= (board[3] << 8) & ~board[0];
@@ -123,7 +133,7 @@ public class BitboardBoard {
         return moves;
     }
 
-    public long blackPawnMoves() {
+    public static long blackPawnMoves(long[] board) {
         long moves = 0L;
         // Single-square moves.
         moves |= (board[9] >> 8) & ~board[0];
@@ -132,22 +142,20 @@ public class BitboardBoard {
         return moves;
     }
 
-    public long whitePawnCaptures() {
-        long captures = 0L;
-        // Capture left.
-        captures |= (board[3] << 7) & board[2] & 0xFEFEFEFEFEFEFEFEL;
-        // Capture right.
-        captures |= (board[3] << 9) & board[2] & 0x7F7F7F7F7F7F7F7FL;
-        return captures;
+    public static long whitePawnRightCaptures(long[] board) {
+        return (board[3] << 9) & board[2] & 0x7F7F7F7F7F7F7F7FL;
     }
 
-    public long blackPawnCaptures() {
-        long captures = 0L;
-        // Capture left.
-        captures |= (board[9] >> 7) & board[1] & 0xFEFEFEFEFEFEFEFEL;
-        // Capture right.
-        captures |= (board[9] >> 9) & board[1] & 0x7F7F7F7F7F7F7F7FL;
-        return captures;
+    public static long whitePawnLeftCaptures(long[] board){
+        return (board[3] << 7) & board[2] &0xFEFEFEFEFEFEFEFEL;
+    }
+
+    public static long blackPawnRightCaptures(long[] board) {
+        return (board[9] >> 9) & board[1] & 0x7F7F7F7F7F7F7F7FL;
+    }
+
+    public static long blackPawnLeftCaptures(long[] board) {
+        return (board[9] >> 7) & board[1] & 0xFEFEFEFEFEFEFEFEL;
     }
 
     // #########################################################################
@@ -162,19 +170,19 @@ public class BitboardBoard {
 
     // Since there's only ever one king, we can just use the LSB to find the king's position and save a little time with parameter passing.
 
-    public long whiteKingMoves() {
+    public static long whiteKingMoves(long[] board) {
         return kingLookupTable[Long.numberOfTrailingZeros(board[8])] & ~board[0];
     }
 
-    public long whiteKingCaptures() {
+    public static long whiteKingCaptures(long[] board) {
         return kingLookupTable[Long.numberOfTrailingZeros(board[8])] & board[2];
     }
 
-    public long blackKingMoves() {
+    public static long blackKingMoves(long[] board) {
         return kingLookupTable[Long.numberOfTrailingZeros(board[14])] & ~board[0];
     }
 
-    public long blackKingCaptures() {
+    public static long blackKingCaptures(long[] board) {
         return kingLookupTable[Long.numberOfTrailingZeros(board[14])] & board[1];
     }
 
@@ -186,16 +194,16 @@ public class BitboardBoard {
     // There can be multiple knights, so we need to pass the knight's position as a parameter.
     // That can just be an integer; no need to worry about trailing zeros here.
 
-    public long knightMoves(int knight) {
-        return knightLookupTable[knight] & ~board[0];
+    public static long knightMoves(int square, long[] board) {
+        return knightLookupTable[square] & ~board[0];
     }
 
-    public long whiteKnightCaptures(int knight) {
-        return knightLookupTable[knight] & board[2];
+    public static long whiteKnightCaptures(int square, long[] board) {
+        return knightLookupTable[square] & board[2];
     }
 
-    public long blackKnightCaptures(int knight) {
-        return knightLookupTable[knight] & board[1];
+    public static long blackKnightCaptures(int square, long[] board) {
+        return knightLookupTable[square] & board[1];
     }
 
     // #########################################################################
@@ -211,15 +219,15 @@ public class BitboardBoard {
     // when multiplied by the occupied squares in the mask and shifted, becomes a unique index for the attack table.
     // Do I, strictly speaking, *understand* this? Vaguely at best, but I tested it, and it works, so I'm a happy man.
 
-    public long bishopMoves(int square) {
+    public static long bishopMoves(int square, long[] board) {
         return bishopLookupTable[square][(int)((board[0] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square])];
     }
 
-    public long whiteBishopCaptures(int square) {
+    public static long whiteBishopCaptures(int square, long[] board) {
         return bishopLookupTable[square][(int)((board[0] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square])] & board[2];
     }
 
-    public long blackBishopCaptures(int square) {
+    public static long blackBishopCaptures(int square, long[] board) {
         return bishopLookupTable[square][(int)((board[0] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square])] & board[1];
     }
 
@@ -228,15 +236,15 @@ public class BitboardBoard {
 
     // Second verse, same as the first.
 
-    public long rookMoves(int square) {
+    public static long rookMoves(int square, long[] board) {
         return rookLookupTable[square][(int)((board[0] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square])];
     }
 
-    public long whiteRookCaptures(int square) {
+    public static long whiteRookCaptures(int square, long[] board) {
         return rookLookupTable[square][(int)((board[0] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square])] & board[2];
     }
 
-    public long blackRookCaptures(int square) {
+    public static long blackRookCaptures(int square, long[] board) {
         return rookLookupTable[square][(int)((board[0] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square])] & board[1];
     }
 
@@ -246,19 +254,277 @@ public class BitboardBoard {
     // Thankfully, this one's easy when the lookup tables are already generated.
     // We simply get the rook and bishop moves for the square and combine them with a bitwise 'OR'.
 
-    public long queenMoves(int square) {
+    public static long queenMoves(int square, long[] board) {
         return rookLookupTable[square][(int)((board[0] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square])] |
                 bishopLookupTable[square][(int)((board[0] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square])];
     }
 
-    public long whiteQueenCaptures(int square) {
+    public static long whiteQueenCaptures(int square, long[] board) {
         return (rookLookupTable[square][(int)((board[0] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square])] |
                 bishopLookupTable[square][(int)((board[0] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square])]) & board[2];
     }
 
-    public long blackQueenCaptures(int square) {
+    public static long blackQueenCaptures(int square, long[] board) {
         return (rookLookupTable[square][(int)((board[0] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square])] |
                 bishopLookupTable[square][(int)((board[0] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square])]) & board[1];
+    }
+
+    // #########################################################################
+    // CHECK CHECKS (PUN INTENDED).
+
+    public static boolean isInCheck(long[] board, boolean white) {
+        // First we find the king's position.
+        int kingSquare = Long.numberOfTrailingZeros(board[white ? 8 : 14]);
+
+        // Then we check from the king's square to all the squares that can attack it and see if any of them are occupied by an enemy piece.
+        // For obvious reasons, we don't need to check the enemy king's moves.
+
+        // We check whether any pawn captures for the opposite colour overlap with the king's position, then whether any non-king piece in the king's position can see a corresponding piece of the opposite colour.
+        return ((white ? blackPawnRightCaptures(board) : whitePawnRightCaptures(board)) & board[white ? 8 : 14]) != 0L ||
+                ((white ? blackPawnLeftCaptures(board) : whitePawnLeftCaptures(board)) & board[white ? 8 : 14]) != 0L ||
+                ((white ? whiteKnightCaptures(kingSquare, board) : blackKnightCaptures(kingSquare, board)) & board[white ? 10 : 4]) != 0L ||
+                ((white ? whiteBishopCaptures(kingSquare, board) : blackBishopCaptures(kingSquare, board)) & (board[white ? 11 : 5] | board[white ? 13 : 7])) != 0L ||
+                ((white ? whiteRookCaptures(kingSquare, board) : blackRookCaptures(kingSquare, board)) & (board[white ? 12 : 6] | board[white ? 13 : 7])) != 0L;
+
+    }
+
+    // ##########################################################################
+    // ENCODING MOVES.
+
+    // Making a large number of Move objects is inefficient, but we can encode the data into a 32-bit integer instead.
+    // When encoding, remember that the LSB is A1, and the MSB is H8.
+    // The pieces are valued as follows:
+    // 1 = pawn.
+    // 2 = knight.
+    // 3 = bishop.
+    // 4 = rook.
+    // 5 = queen.
+    // 6 = king.
+    public static int encodeMove(int from, int to, int piece, int captured, int promotion, boolean isEP, boolean isCastle) {
+        return (from) | (to << 6) | (piece << 12) | (captured << 16) | (promotion << 20) | ((isEP ? 1 : 0) << 24) | ((isCastle ? 1 : 0) << 25);
+    }
+
+    // Apparently these are efficient enough that there's no advantage to hardcoding the logic.
+    public static int getFrom(int move)       { return move & 0x3F; }  // Bits 0-5
+    public static int getTo(int move)         { return (move >>> 6) & 0x3F; }  // Bits 6-11
+    public static int getPiece(int move)      { return (move >>> 12) & 0xF; }  // Bits 12-15
+    public static int getCaptured(int move)   { return (move >>> 16) & 0xF; }  // Bits 16-19
+    public static int getPromotion(int move)  { return (move >>> 20) & 0xF; }  // Bits 20-23
+    public static boolean isEnPassant(int move) { return ((move >>> 24) & 1) != 0; }  // Bit 24
+    public static boolean isCastling(int move)  { return ((move >>> 25) & 1) != 0; }  // Bit 25
+
+    // ##########################################################################
+    // VARIOUS METHODS FOR MAKING AND FINDING MOVES.
+
+    // Returns the type of piece at the given square.
+    public static int getPieceType(int square, long[] board, boolean white) {
+        long sqMask = 1L << square;
+
+        if (white) {
+            if ((board[3] & sqMask) != 0L) return 1; // Pawn
+            if ((board[4] & sqMask) != 0L) return 2; // Knight
+            if ((board[5] & sqMask) != 0L) return 3; // Bishop
+            if ((board[6] & sqMask) != 0L) return 4; // Rook
+            if ((board[7] & sqMask) != 0L) return 5; // Queen
+            if ((board[8] & sqMask) != 0L) return 6; // King
+        } else {
+            if ((board[9] & sqMask) != 0L) return 1; // Pawn
+            if ((board[10] & sqMask) != 0L) return 2; // Knight
+            if ((board[11] & sqMask) != 0L) return 3; // Bishop
+            if ((board[12] & sqMask) != 0L) return 4; // Rook
+            if ((board[13] & sqMask) != 0L) return 5; // Queen
+            if ((board[14] & sqMask) != 0L) return 6; // King
+        }
+
+        return 0;
+    }
+
+    public static int[] getAllMoves(long[] board, boolean white) {
+        // Setting a large size for the array so it won't run out of space.
+        int[] moves = new int[256];
+        int moveCount = 0;
+
+        // This method doesn't have any logic for determining which moves are best, except that captures are always at the start of the array and therefore examined first.
+
+        // Pawn captures.
+        long pawnRightCaptures = white ? whitePawnRightCaptures(board) : blackPawnRightCaptures(board);
+        long pawnLeftCaptures = white ? whitePawnLeftCaptures(board) : blackPawnLeftCaptures(board);
+        for (int i =  Long.bitCount(pawnRightCaptures); i > 0; i--) {
+            int targetSquare = Long.numberOfTrailingZeros(pawnRightCaptures);
+            // TODO: create promotion logic.
+            moves[moveCount++] = encodeMove((white ? targetSquare-9 : targetSquare+9), targetSquare, 0, getPieceType(targetSquare, board, white), 0, false, false);
+            pawnRightCaptures &= pawnRightCaptures - 1;
+        }
+
+        for (int i = Long.bitCount(pawnLeftCaptures); i > 0; i--) {
+            int targetSquare = Long.numberOfTrailingZeros(pawnLeftCaptures);
+            // TODO: add promotion logic here once created.
+            moves[moveCount++] = encodeMove((white ? targetSquare-7 : targetSquare+7), targetSquare, 0, getPieceType(targetSquare, board, white), 0, false, false);
+            pawnLeftCaptures &= pawnLeftCaptures - 1;
+        }
+
+        // Knight captures.
+        long knights = white ? board[4] : board[10];
+        for (int i = 0; i < Long.bitCount(knights); i++) {
+            int square = Long.numberOfTrailingZeros(knights);
+            long knightCaptures = white ? whiteKnightCaptures(square, board) : blackKnightCaptures(square, board);
+            for (int j = Long.bitCount(knightCaptures); j > 0; j--) {
+                int targetSquare = Long.numberOfTrailingZeros(knightCaptures);
+                moves[moveCount++] = encodeMove(square, targetSquare, 2, getPieceType(targetSquare, board, white), 0, false, false);
+                knightCaptures &= knightCaptures - 1;
+            }
+            knights &= knights - 1;
+        }
+
+        // Bishop captures.
+        long bishops = white ? board[5] : board[11];
+        for (int i = 0; i < Long.bitCount(bishops); i++) {
+            int square = Long.numberOfTrailingZeros(bishops);
+            long bishopCaptures = white ? whiteBishopCaptures(square, board) : blackBishopCaptures(square, board);
+            for (int j = Long.bitCount(bishopCaptures); j > 0; j--) {
+                int targetSquare = Long.numberOfTrailingZeros(bishopCaptures);
+                moves[moveCount++] = encodeMove(square, targetSquare, 3, getPieceType(targetSquare, board, white), 0, false, false);
+                bishopCaptures &= bishopCaptures - 1;
+            }
+            bishops &= bishops - 1;
+        }
+
+        // Rook captures.
+        long rooks = white ? board[6] : board[12];
+        for (int i = 0; i < Long.bitCount(rooks); i++) {
+            int square = Long.numberOfTrailingZeros(rooks);
+            long rookCaptures = white ? whiteRookCaptures(square, board) : blackRookCaptures(square, board);
+            for (int j = Long.bitCount(rookCaptures); j > 0; j--) {
+                int targetSquare = Long.numberOfTrailingZeros(rookCaptures);
+                moves[moveCount++] = encodeMove(square, targetSquare, 4, getPieceType(targetSquare, board, white), 0, false, false);
+                rookCaptures &= rookCaptures - 1;
+            }
+            rooks &= rooks - 1;
+        }
+
+        // Queen captures.
+        long queens = white ? board[7] : board[13];
+        for (int i = 0; i < Long.bitCount(queens); i++) {
+            int square = Long.numberOfTrailingZeros(queens);
+            long queenCaptures = white ? whiteQueenCaptures(square, board) : blackQueenCaptures(square, board);
+            for (int j = Long.bitCount(queenCaptures); j > 0; j--) {
+                int targetSquare = Long.numberOfTrailingZeros(queenCaptures);
+                moves[moveCount++] = encodeMove(square, targetSquare, 5, getPieceType(targetSquare, board, white), 0, false, false);
+                queenCaptures &= queenCaptures - 1;
+            }
+            queens &= queens - 1;
+        }
+
+        // King captures.
+        int kingSquare = Long.numberOfTrailingZeros(white ? board[8] : board[14]);
+        long kingCaptures = white ? whiteKingCaptures(board) : blackKingCaptures(board);
+        for (int j = Long.bitCount(kingCaptures); j > 0; j--) {
+            int targetSquare = Long.numberOfTrailingZeros(kingCaptures);
+            moves[moveCount++] = encodeMove(kingSquare, targetSquare, 6, getPieceType(targetSquare, board, white), 0, false, false);
+            kingCaptures &= kingCaptures - 1;
+        }
+
+        // Pawn moves.
+        long pawnMoves = white ? whitePawnMoves(board) : blackPawnMoves(board);
+        // TODO: add logic.
+
+        // Knight moves.
+        knights = white ? board[4] : board[10];
+        for (int i = 0; i < Long.bitCount(knights); i++) {
+            int square = Long.numberOfTrailingZeros(knights);
+            long knightMoves = knightMoves(square, board);
+            for (int j = Long.bitCount(knightMoves); j > 0; j--) {
+                int targetSquare = Long.numberOfTrailingZeros(knightMoves);
+                moves[moveCount++] = encodeMove(square, targetSquare, 2, 0, 0, false, false);
+                knightMoves &= knightMoves - 1;
+            }
+            knights &= knights - 1;
+        }
+
+        // Bishop moves.
+        bishops = white ? board[5] : board[11];
+        for (int i = 0; i < Long.bitCount(bishops); i++) {
+            int square = Long.numberOfTrailingZeros(bishops);
+            long bishopMoves = bishopMoves(square, board);
+            for (int j = Long.bitCount(bishopMoves); j > 0; j--) {
+                int targetSquare = Long.numberOfTrailingZeros(bishopMoves);
+                moves[moveCount++] = encodeMove(square, targetSquare, 3, 0, 0, false, false);
+                bishopMoves &= bishopMoves - 1;
+            }
+            bishops &= bishops - 1;
+        }
+
+        // Rook moves.
+        rooks = white ? board[6] : board[12];
+        for (int i = 0; i < Long.bitCount(rooks); i++) {
+            int square = Long.numberOfTrailingZeros(rooks);
+            long rookMoves = rookMoves(square, board);
+            for (int j = Long.bitCount(rookMoves); j > 0; j--) {
+                int targetSquare = Long.numberOfTrailingZeros(rookMoves);
+                moves[moveCount++] = encodeMove(square, targetSquare, 4, 0, 0, false, false);
+                rookMoves &= rookMoves - 1;
+            }
+            rooks &= rooks - 1;
+        }
+
+        // Queen moves.
+        queens = white ? board[7] : board[13];
+        for (int i = 0; i < Long.bitCount(queens); i++) {
+            int square = Long.numberOfTrailingZeros(queens);
+            long queenMoves = queenMoves(square, board);
+            for (int j = Long.bitCount(queenMoves); j > 0; j--) {
+                int targetSquare = Long.numberOfTrailingZeros(queenMoves);
+                moves[moveCount++] = encodeMove(square, targetSquare, 5, 0, 0, false, false);
+                queenMoves &= queenMoves - 1;
+            }
+            queens &= queens - 1;
+        }
+
+        // King moves.
+        kingSquare = Long.numberOfTrailingZeros(white ? board[8] : board[14]);
+        long kingMoves = white ? whiteKingMoves(board) : blackKingMoves(board);
+        for (int j = Long.bitCount(kingMoves); j > 0; j--) {
+            int targetSquare = Long.numberOfTrailingZeros(kingMoves);
+            moves[moveCount++] = encodeMove(kingSquare, targetSquare, 6, 0, 0, false, false);
+            kingMoves &= kingMoves - 1;
+        }
+
+        return Arrays.copyOf(moves, moveCount);
+    }
+
+    // ###########################################################################
+    // METHODS FOR MAKING MOVES.
+
+    // Important to keep in mind: XOR (^) toggles bits, moving the piece, while AND (&) clears the bits, removing the piece.
+    // The getPiece() method returns 1 for pawns, 2 for knights, 3 for bishops, 4 for rooks, 5 for queens, and 6 for kings.
+    // We need to add 2 to the piece type to get the index of the board for white pieces (3-8), and 8 to get the index for black pieces (9-14).
+
+    // Fun fact: I originally made makeMove() and undoMove() methods, but then I realised that XOR is reversible, so it was just two identical methods.
+    // I know that's not *surprising*, but I just blew my own mind.
+    public static long[] makeOrUndoMove(long[] board, int move, boolean white) {
+        if (white) {
+            board[1] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the white pieces.
+            board[getPiece(move)+2] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the piece type.
+            if (getCaptured(move) != 0) {
+                board[0] ^= (1L << getFrom(move)); // Update the 'from' square on the 'all pieces' board.
+                board[2] ^= (1L << getTo(move)); // Update the 'to' square on the 'black pieces' board.
+                board[getCaptured(move)+8] ^= (1L << getTo(move)); // Update the captured piece on the 'black pieces' board.
+            } else {
+                board[0] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the 'all pieces' board.
+            }
+        } else {
+            board[2] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the black pieces.
+            board[getPiece(move)+8] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the piece type.
+            if (getCaptured(move) != 0) {
+                board[0] ^= (1L << getFrom(move)); // Update the 'from' square on the 'all pieces' board.
+                board[1] ^= (1L << getTo(move)); // Update the 'to' square on the 'white pieces' board.
+                board[getCaptured(move)+2] ^= (1L << getTo(move)); // Update the captured piece on the 'white pieces' board.
+            } else {
+                board[0] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the 'all pieces' board.
+            }
+        }
+
+        return board;
     }
 
 }
