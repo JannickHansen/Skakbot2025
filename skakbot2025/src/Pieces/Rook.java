@@ -9,6 +9,9 @@ public class Rook extends Piece {
         super(isWhite, row, col);
         this.hasMoved = false;
     }
+    public void setHasMoved(boolean moved) {
+        this.hasMoved = moved;
+    }
 
     @Override
     public ImageIcon getIcon() {
