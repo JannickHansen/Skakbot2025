@@ -10,6 +10,10 @@ public class King extends Piece {
         this.hasMoved = false;
     }
 
+    public void setHasMoved(boolean moved) {
+        this.hasMoved = moved;
+    }
+
     @Override
     public ImageIcon getIcon() {
         return Util.PieceImageLoader.getPieceIcon("king", isWhite);

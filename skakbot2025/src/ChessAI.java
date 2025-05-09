@@ -11,8 +11,8 @@ import java.util.*;
 
 public class ChessAI {
     private static final int MAX_DEPTH = 15;
-    private static final long TIME_LIMIT = 14_950_000_000L; // 15s
-    private static final int ASPIRATION_WINDOW_VALUE = 100; // ±100cp
+    private static final long TIME_LIMIT = 14_950_000_000L;
+    private static final int ASPIRATION_WINDOW_VALUE = 150;
     private static final int MATE_SCORE = 1_000_000;
     private static final int[][] CENTER_CONTROL_BONUS = {
             {0,0,5,5,5,5,0,0},
@@ -24,7 +24,7 @@ public class ChessAI {
             {0,5,10,10,10,10,5,0},
             {0,0,5,5,5,5,0,0},
     };
-    private static final int ENDGAME_PIECE_THRESHOLD = 10;
+    private static final int ENDGAME_PIECE_THRESHOLD = 12;
     private static final int CHECK_BONUS = 50;
     private static final int KING_ACTIVITY_WEIGHT    = 20;
     private static final int MOBILITY_WEIGHT         = 4;
@@ -169,6 +169,18 @@ public class ChessAI {
             int rootDepth
     ) {
         if (System.nanoTime() - start >= timeLimit) return null;
+        if (depth < 0) depth = 0;
+
+        boolean winningMaterial = evaluateBoard(board) * (maxPlayer ? 1 : -1) >= 1800;
+        if (depth == 0) {
+            if (rootDepth > 3 && !(winningMaterial || board.isInCheck(maxPlayer))) {
+                int q = quiesce(board, maxPlayer, alpha, beta);
+                return new ScoredMove(null, q);
+            } else {
+                int eval = evaluateBoard(board) * (maxPlayer ? 1 : -1);
+                return new ScoredMove(null, eval);
+            }
+        }
 
         long key = computeZobrist(board, maxPlayer);
         TTEntry ent = tt.get(key);
@@ -188,11 +200,6 @@ public class ChessAI {
         if (depth == rootDepth) {
             int cnt = rootRepeats.getOrDefault(key, 0);
             rootRepeats.put(key, cnt + 1);
-        }
-
-        if (depth == 0) {
-            int q = quiesce(board, maxPlayer, alpha, beta);
-            return new ScoredMove(null, q);
         }
 
         int origAlpha = alpha, origBeta = beta;
@@ -229,10 +236,12 @@ public class ChessAI {
                 alpha = Math.max(alpha, score);
                 if (beta <= alpha) {
                     cutoffCount++;
-                    recordKiller(m, depth);
+                    if (depth > 0) {
+                        recordKiller(m, depth);
+                    }
                     break;
                 }
-                recordHistory(m, depth);
+                if (depth > 0) recordHistory(m, depth);
             }
         } else {
             for (Move m : moves) {
@@ -253,10 +262,12 @@ public class ChessAI {
                 beta = Math.min(beta, score);
                 if (beta <= alpha) {
                     cutoffCount++;
-                    recordKiller(m, depth);
+                    if (depth > 0) {
+                        recordKiller(m, depth);
+                    }
                     break;
                 }
-                recordHistory(m, depth);
+                if (depth > 0) recordHistory(m, depth);
             }
         }
 
@@ -434,10 +445,12 @@ public class ChessAI {
                     sc += 10_000 + getPieceValue(cap) - getPieceValue(p);
                 else if (board.isInCheck(!isWhite))
                     sc += 5_000;
-                int d = depth - 1;
-                if (killerMoves[0][d] == m) sc += KILLER1_BONUS;
-                if (killerMoves[1][d] == m) sc += KILLER2_BONUS;
-                sc += historyHeuristic[m.fromIndex()][m.toIndex()];
+                if (depth > 0) {
+                    int d = depth - 1;
+                    if (killerMoves[0][d] == m) sc += KILLER1_BONUS;
+                    if (killerMoves[1][d] == m) sc += KILLER2_BONUS;
+                    sc += historyHeuristic[m.fromIndex()][m.toIndex()];
+                }
                 sc += CENTER_CONTROL_BONUS[tr][tc];
                 moves.add(m);
                 scores.put(m, sc);
@@ -471,29 +484,49 @@ public class ChessAI {
     }
 
     private boolean makeMove(Board board, Move m, boolean isWhite) {
-        if (!m.movedPiece.isValidMove(m.toRow, m.toCol, board.board))
-            return false;
+        Piece piece = m.movedPiece;
 
-        if (m.promotion != null) {
-            board.board[m.toRow][m.toCol] = m.promotion;
-        } else {
-            board.board[m.toRow][m.toCol] = m.movedPiece;
-        }
-        board.board[m.fromRow][m.fromCol] = null;
-
-        if (m.promotion == null) {
-            m.movedPiece.setPosition(m.toRow, m.toCol);
-        }
-
-        if (m.movedPiece instanceof King && Math.abs(m.toCol - m.fromCol) == 2) {
+        if (piece instanceof King && Math.abs(m.toCol - m.fromCol) == 2) {
             int dir = (m.toCol > m.fromCol) ? 1 : -1;
+            if (!board.canCastle(isWhite, dir)) {
+                return false;
+            }
+
+            board.board[m.toRow][m.toCol]   = piece;
+            board.board[m.fromRow][m.fromCol] = null;
+            piece.move(m.toRow, m.toCol);
+
             int rookFrom = (dir == 1 ? 7 : 0);
             int rookTo   = m.fromCol + dir;
             Piece rook   = board.board[m.toRow][rookFrom];
             board.board[m.toRow][rookTo]   = rook;
             board.board[m.toRow][rookFrom] = null;
-            rook.setPosition(m.toRow, rookTo);
+            if (rook instanceof Rook) {
+                ((Rook) rook).move(m.toRow, rookTo);
+            }
+
+            ((King) piece).setHasMoved(true);
+            if (rook instanceof Rook) {
+                ((Rook) rook).setHasMoved(true);
+            }
+
+            if (board.isInCheck(isWhite)) {
+                undoMove(board, m);
+                return false;
+            }
+            return true;
         }
+
+        if (!piece.isValidMove(m.toRow, m.toCol, board.board)) {
+            return false;
+        }
+        if (m.promotion != null) {
+            board.board[m.toRow][m.toCol] = m.promotion;
+        } else {
+            board.board[m.toRow][m.toCol] = piece;
+        }
+        board.board[m.fromRow][m.fromCol] = null;
+        piece.setPosition(m.toRow, m.toCol);
 
         if (board.isInCheck(isWhite)) {
             undoMove(board, m);
@@ -502,15 +535,23 @@ public class ChessAI {
         return true;
     }
 
+
     private void undoMove(Board board, Move m) {
         if (m.movedPiece instanceof King && Math.abs(m.toCol - m.fromCol) == 2) {
-            int dir = (m.toCol > m.fromCol) ? 1 : -1;
+            int dir      = (m.toCol > m.fromCol) ? 1 : -1;
             int rookTo   = m.fromCol + dir;
             int rookFrom = (dir == 1 ? 7 : 0);
             Piece rook   = board.board[m.toRow][rookTo];
-            board.board[m.toRow][rookFrom] = rook;
-            rook.setPosition(m.toRow, rookFrom);
-            board.board[m.toRow][rookTo]   = null;
+
+            if (rook instanceof Rook) {
+                board.board[m.toRow][rookFrom] = rook;
+                rook.setPosition(m.toRow, rookFrom);
+                board.board[m.toRow][rookTo]   = null;
+
+                ((Rook) rook).setHasMoved(false);
+            }
+
+            ((King) m.movedPiece).setHasMoved(false);
         }
 
         if (m.promotion != null) {
@@ -533,7 +574,6 @@ public class ChessAI {
             for (int c = 0; c < 8; c++) {
                 Piece p = b[r][c];
                 if (p == null) continue;
-
                 int v  = getPieceValue(p);
                 int cb = CENTER_CONTROL_BONUS[r][c];
                 score += p.isWhite() ? v + cb : -(v + cb);
@@ -545,7 +585,6 @@ public class ChessAI {
                         if (r == 0 && (c == 6 || c == 2)) score -= 30;
                     }
                 }
-
                 if (!(p instanceof Pieces.King)) pieceCount++;
                 if (p instanceof Pieces.King) {
                     if (p.isWhite()) { wkR = r; wkC = c; }
@@ -554,7 +593,6 @@ public class ChessAI {
             }
         }
 
-        // 2) Endgame‐phase bonuses
         if (pieceCount <= ENDGAME_PIECE_THRESHOLD) {
             int wKA = kingCentrality(wkR, wkC),
                     bKA = kingCentrality(bkR, bkC);
@@ -567,18 +605,11 @@ public class ChessAI {
             for (int r = 0; r < 8; r++) {
                 for (int c = 0; c < 8; c++) {
                     Piece p = b[r][c];
-                    if (!(p instanceof Pieces.Pawn)) continue;
-                    boolean whitePawn = p.isWhite(), passed = true;
-                    int dir = whitePawn ? -1 : +1;
-                    for (int rr = r + dir; rr >= 0 && rr < 8; rr += dir) {
-                        if (b[rr][c] != null && b[rr][c].isWhite() == whitePawn) {
-                            passed = false;
-                            break;
-                        }
-                    }
-                    if (passed) {
-                        int dist = whitePawn ? r : 7 - r;
-                        score += (whitePawn ? 1 : -1)
+                    if (!(p instanceof Pawn)) continue;
+                    if (isPassedPawn(b, r, c)) {
+                        boolean whitePawn = p.isWhite();
+                        int dist = whitePawn ? r : (7 - r);
+                        score += (whitePawn ? +1 : -1)
                                 * PASSED_PAWN_WEIGHT
                                 * (8 - dist);
                     }
@@ -586,16 +617,28 @@ public class ChessAI {
             }
         }
 
-        if (board.isInCheck(false)) {
-            score += CHECK_BONUS;
-        }
-        if (board.isInCheck(true)) {
-            score -= CHECK_BONUS;
-        }
+        if (board.isInCheck(false)) score += CHECK_BONUS;
+        if (board.isInCheck(true))  score -= CHECK_BONUS;
 
         return score;
     }
 
+    private boolean isPassedPawn(Piece[][] board, int r, int c) {
+        Piece p = board[r][c];
+        if (!(p instanceof Pawn)) return false;
+        boolean whitePawn = p.isWhite();
+        int dir = whitePawn ? -1 : +1;
+        for (int rr = r + dir; rr >= 0 && rr < 8; rr += dir) {
+            for (int fc = c - 1; fc <= c + 1; fc++) {
+                if (fc < 0 || fc > 7) continue;
+                Piece q = board[rr][fc];
+                if (q instanceof Pawn && q.isWhite() != whitePawn) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
 
     private int kingCentrality(int r, int c) {
         double dr = Math.abs(r - 3.5), dc = Math.abs(c - 3.5);
