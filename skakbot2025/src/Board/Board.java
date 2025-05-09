@@ -68,7 +68,7 @@ public class Board {
 
 
         for (int c = kingCol + direction; c != rookCol; c += direction) {
-            System.out.println("  board[" + row + "][" + c + "] = " + board[row][c]);
+            //System.out.println("  board[" + row + "][" + c + "] = " + board[row][c]);
         }
 
         if (k.hasMoved() || r.hasMoved()) return false;
