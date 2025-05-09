@@ -13,11 +13,7 @@ public class ChessAI {
     private static final int MAX_DEPTH = 15;
     private static final long TIME_LIMIT = 14_950_000_000L; // 15s
     private static final int ASPIRATION_WINDOW_VALUE = 100; // ±100cp
-
-    // “Mate” terminal score
     private static final int MATE_SCORE = 1_000_000;
-
-    // Center‐control bonus
     private static final int[][] CENTER_CONTROL_BONUS = {
             {0,0,5,5,5,5,0,0},
             {0,5,10,10,10,10,5,0},
@@ -28,19 +24,14 @@ public class ChessAI {
             {0,5,10,10,10,10,5,0},
             {0,0,5,5,5,5,0,0},
     };
-
-    // Endgame‐phase constants
-    private static final int ENDGAME_PIECE_THRESHOLD = 8;
+    private static final int ENDGAME_PIECE_THRESHOLD = 10;
+    private static final int CHECK_BONUS = 50;
     private static final int KING_ACTIVITY_WEIGHT    = 20;
     private static final int MOBILITY_WEIGHT         = 4;
     private static final int PASSED_PAWN_WEIGHT      = 20;
-
-    // Move‐ordering bonuses
     private static final int PV_BONUS      = 1_000_000;
     private static final int KILLER1_BONUS =   8_000;
     private static final int KILLER2_BONUS =   7_000;
-
-    // Zobrist hashing
     private static final long[][] ZOBRIST_PIECE_KEYS = new long[12][64];
     private static final long   ZOBRIST_SIDE_TO_MOVE;
     static {
@@ -59,11 +50,9 @@ public class ChessAI {
         }
     }
 
-    // Transposition table entry
     private static class TTEntry {
         int depth, value, flag;
         Move best;
-        // flag: 0=EXACT, 1=LOWERBOUND, 2=UPPERBOUND
     }
     private final Map<Long,TTEntry> tt = new HashMap<>();
 
@@ -76,7 +65,7 @@ public class ChessAI {
     public static class Move {
         public final int fromRow, fromCol, toRow, toCol;
         public final Piece movedPiece, capturedPiece;
-        public final Piece promotion;  // null if no promotion
+        public final Piece promotion;
 
         public Move(int fr, int fc, int tr, int tc,
                     Piece m, Piece c, Piece promotion) {
@@ -142,7 +131,6 @@ public class ChessAI {
                     start, timeLimit, prevPV, rootRepeats, depth
             );
 
-            // aspiration fallback
             if (sm != null && (sm.score <= alpha || sm.score >= beta)) {
                 sm = minimaxWithTimeout(
                         board, depth,
@@ -406,12 +394,10 @@ public class ChessAI {
             Piece p = arr[r][c];
             if (p==null || p.isWhite()!=isWhite) continue;
 
-            // Generate normal and promotion moves
             for (int tr=0;tr<8;tr++) for (int tc=0;tc<8;tc++){
                 if (!p.isValidMove(tr,tc,arr)) continue;
                 Piece cap = arr[tr][tc];
 
-                // Pawn promotions
                 if (p instanceof Pawn && (tr == 0 || tr == 7)) {
                     Piece[] promos = {
                             new Queen(isWhite, tr, tc),
@@ -440,7 +426,6 @@ public class ChessAI {
                     continue;
                 }
 
-                // Normal moves
                 Move m = new Move(r, c, tr, tc, p, cap);
                 if (!makeMove(board, m, isWhite)) continue;
                 int sc = 0;
@@ -459,9 +444,7 @@ public class ChessAI {
                 undoMove(board, m);
             }
 
-            // Castling moves
             if (p instanceof King) {
-                // king-side
                 if (board.canCastle(isWhite, +1)) {
                     Move m = new Move(r, c, r, c + 2, p, null);
                     if (makeMove(board, m, isWhite)) {
@@ -471,7 +454,6 @@ public class ChessAI {
                         undoMove(board, m);
                     }
                 }
-                // queen-side
                 if (board.canCastle(isWhite, -1)) {
                     Move m = new Move(r, c, r, c - 2, p, null);
                     if (makeMove(board, m, isWhite)) {
@@ -492,7 +474,6 @@ public class ChessAI {
         if (!m.movedPiece.isValidMove(m.toRow, m.toCol, board.board))
             return false;
 
-        // Perform the move (or promotion)
         if (m.promotion != null) {
             board.board[m.toRow][m.toCol] = m.promotion;
         } else {
@@ -504,7 +485,6 @@ public class ChessAI {
             m.movedPiece.setPosition(m.toRow, m.toCol);
         }
 
-        // Handle castling rook move
         if (m.movedPiece instanceof King && Math.abs(m.toCol - m.fromCol) == 2) {
             int dir = (m.toCol > m.fromCol) ? 1 : -1;
             int rookFrom = (dir == 1 ? 7 : 0);
@@ -515,7 +495,6 @@ public class ChessAI {
             rook.setPosition(m.toRow, rookTo);
         }
 
-        // If move leaves own king in check, undo and reject
         if (board.isInCheck(isWhite)) {
             undoMove(board, m);
             return false;
@@ -524,7 +503,6 @@ public class ChessAI {
     }
 
     private void undoMove(Board board, Move m) {
-        // Undo castling rook
         if (m.movedPiece instanceof King && Math.abs(m.toCol - m.fromCol) == 2) {
             int dir = (m.toCol > m.fromCol) ? 1 : -1;
             int rookTo   = m.fromCol + dir;
@@ -535,7 +513,6 @@ public class ChessAI {
             board.board[m.toRow][rookTo]   = null;
         }
 
-        // Restore moving piece or pawn (if promotion)
         if (m.promotion != null) {
             board.board[m.fromRow][m.fromCol] = m.movedPiece;
             m.movedPiece.setPosition(m.fromRow, m.fromCol);
@@ -544,7 +521,6 @@ public class ChessAI {
             m.movedPiece.setPosition(m.fromRow, m.fromCol);
         }
 
-        // Restore captured piece
         board.board[m.toRow][m.toCol] = m.capturedPiece;
     }
 
@@ -553,7 +529,6 @@ public class ChessAI {
         Piece[][] b = board.board;
         int wkR = 0, wkC = 0, bkR = 0, bkC = 0, pieceCount = 0;
 
-        // 1) Material + center + castling reward
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
                 Piece p = b[r][c];
@@ -563,18 +538,14 @@ public class ChessAI {
                 int cb = CENTER_CONTROL_BONUS[r][c];
                 score += p.isWhite() ? v + cb : -(v + cb);
 
-                // ─── NEW: castle‐safety bonus ───
                 if (p instanceof King) {
                     if (p.isWhite()) {
-                        // white castled positions g1 (7,6) or c1 (7,2)
                         if (r == 7 && (c == 6 || c == 2)) score += 30;
                     } else {
-                        // black castled positions g8 (0,6) or c8 (0,2)
                         if (r == 0 && (c == 6 || c == 2)) score -= 30;
                     }
                 }
 
-                // track non-king pieces and locate kings
                 if (!(p instanceof Pieces.King)) pieceCount++;
                 if (p instanceof Pieces.King) {
                     if (p.isWhite()) { wkR = r; wkC = c; }
@@ -583,7 +554,7 @@ public class ChessAI {
             }
         }
 
-        // 2) Endgame‐phase bonuses (king activity, mobility, passed‐pawn)
+        // 2) Endgame‐phase bonuses
         if (pieceCount <= ENDGAME_PIECE_THRESHOLD) {
             int wKA = kingCentrality(wkR, wkC),
                     bKA = kingCentrality(bkR, bkC);
@@ -613,6 +584,13 @@ public class ChessAI {
                     }
                 }
             }
+        }
+
+        if (board.isInCheck(false)) {
+            score += CHECK_BONUS;
+        }
+        if (board.isInCheck(true)) {
+            score -= CHECK_BONUS;
         }
 
         return score;
