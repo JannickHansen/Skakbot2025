@@ -1,13 +1,12 @@
 package Board;
 
+import Pieces.*;
 import java.util.Arrays;
-
 import static BitboardMoveGen.LookupTableGeneration.*;
 
 public class BitboardBoard {
 
-    // It's technically not ideal to keep all of this code in one class, but as I understand it, we save a (possibly tiny) amount of time by not having to pass the board around as a parameter.
-    // And since an array is faster than an ArrayList, passing the board as a parameter would lead to new local variables being created every time we call a method.
+    // If you're reading this, I'm sorry. This logic really needs to be split up, but alas, time doesn't permit that right now.
 
     // The board is represented as a 64-bit integer, where each bit represents a square on the board.
     // The LSB is A1, so the whole board is mirrored along the vertical axis.
@@ -17,16 +16,12 @@ public class BitboardBoard {
     // I think the way to do this is to have the board stored here be the 'canon' version that represents the actual game state.
     // Then we can have the temporary boards be local variables so they can be stored in the stack for speed, and static versions of the methods below can be used to access the lookup tables.
 
-    long[] board = new long[15];
+    long[] board = new long[16];
 
     // Board[0] is all pieces, Board[1] is white pieces, Board[2] is black pieces.
     // Board[3] to Board[8] are the white pieces in the order pawns, knights, bishops, rooks, queens, kings.
     // Board[9] to Board[14] are the black pieces, same order.
-
-    // TODO: move these to another bitboard.
-    // TODO: create a bitboard that stores data for which pieces can be captured by en passant (low priority).
-    boolean whiteCastlingRights = true;
-    boolean blackCastlingRights = true;
+    // Board[15] stores miscellaneous data: castling rights, en passant square, player turn, move number, etc.
 
     // For generating all of these lookup tables, we just call the methods in LookupTableGeneration.java.
     // This code *would* have had a bunch of helpful comments, but I had to refactor everything twice, so we're going to need to talk Harrison Ford into doing another Indy sequel to find them.
@@ -88,22 +83,6 @@ public class BitboardBoard {
         board[index] = newValue;
     }
 
-    public boolean getWhiteCastlingRights() {
-        return whiteCastlingRights;
-    }
-
-    public void setWhiteCastlingRights(boolean newValue) {
-        whiteCastlingRights = newValue;
-    }
-
-    public boolean getBlackCastlingRights() {
-        return blackCastlingRights;
-    }
-
-    public void setBlackCastlingRights(boolean newValue) {
-        blackCastlingRights = newValue;
-    }
-
     // TODO: consider changing this and/or adding a version that takes a FEN string.
     public void manualSetBoard(long[] newBoard) {
         System.arraycopy(newBoard, 0, board, 0, board.length);
@@ -147,7 +126,7 @@ public class BitboardBoard {
     }
 
     public static long whitePawnLeftCaptures(long[] board){
-        return (board[3] << 7) & board[2] &0xFEFEFEFEFEFEFEFEL;
+        return (board[3] << 7) & board[2] & 0xFEFEFEFEFEFEFEFEL;
     }
 
     public static long blackPawnRightCaptures(long[] board) {
@@ -156,6 +135,34 @@ public class BitboardBoard {
 
     public static long blackPawnLeftCaptures(long[] board) {
         return (board[9] >> 7) & board[1] & 0xFEFEFEFEFEFEFEFEL;
+    }
+
+    public static long whitePawnRightEnPassant(long[] board) {
+        long epSquare = getEnPassantSquare(board[15])-1;
+        long epMask = 1L << epSquare;
+
+        return (board[3] << 9) & epMask & 0x7F7F7F7F7F7F7F7FL;
+    }
+
+    public static long whitePawnLeftEnPassant(long[] board) {
+        long epSquare = getEnPassantSquare(board[15])-1;
+        long epMask = 1L << epSquare;
+
+        return (board[3] << 7) & epMask & 0xFEFEFEFEFEFEFEFEL;
+    }
+
+    public static long blackPawnRightEnPassant(long[] board) {
+        long epSquare = getEnPassantSquare(board[15])-1;
+        long epMask = 1L << epSquare;
+
+        return (board[9] >> 9) & epMask & 0x7F7F7F7F7F7F7F7FL;
+    }
+
+    public static long blackPawnLeftEnPassant(long[] board) {
+        long epSquare = getEnPassantSquare(board[15])-1;
+        long epMask = 1L << epSquare;
+
+        return (board[9] >> 7) & epMask & 0xFEFEFEFEFEFEFEFEL;
     }
 
     // #########################################################################
@@ -289,7 +296,7 @@ public class BitboardBoard {
     }
 
     // ##########################################################################
-    // ENCODING MOVES.
+    // ENCODING MOVES AND MISC DATA.
 
     // Making a large number of Move objects is inefficient, but we can encode the data into a 32-bit integer instead.
     // When encoding, remember that the LSB is A1, and the MSB is H8.
@@ -312,6 +319,39 @@ public class BitboardBoard {
     public static int getPromotion(int move)  { return (move >>> 20) & 0xF; }  // Bits 20-23
     public static boolean isEnPassant(int move) { return ((move >>> 24) & 1) != 0; }  // Bit 24
     public static boolean isCastling(int move)  { return ((move >>> 25) & 1) != 0; }  // Bit 25
+
+    // Similarly, we can store a lot of miscellaneous data in board[15] instead of needing separate fields for it.
+    // The data is stored as follows:
+    // Bit 0: white to move. 1 for white, 0 for black.
+    // Bit 1-4: castling rights. 1 for available, 0 for unavailable, in the order WK, WQ, BK, BQ.
+    // Bit 5-11: en passant square. 0 for no en passant, 1-64 for the square. Remember to subtract 1 from the square to get the index.
+    // TODO: add move number and half-move clock. Assuming we need them for anything (king evaluation?); we've got plenty of space in the long.
+
+    public static long encodeMiscData(boolean whiteToMove, boolean[] castlingRights, int enPassantSquare) {
+        long miscData = 0L;
+        miscData |= (whiteToMove ? 1L : 0L);
+        for (int i = 0; i < 4; i++) {
+            miscData |= ((castlingRights[i] ? 1L : 0L) << (i + 1));
+        }
+        miscData |= ((enPassantSquare & 0x3F) << 5);
+        return miscData;
+    }
+
+    public static boolean isWhiteToMove(long miscData) {
+        return (miscData & 1L) != 0L;
+    }
+
+    public static boolean[] getCastlingRights(long miscData) {
+        boolean[] castlingRights = new boolean[4];
+        for (int i = 0; i < 4; i++) {
+            castlingRights[i] = ((miscData >> (i + 1)) & 1L) != 0L;
+        }
+        return castlingRights;
+    }
+
+    public static int getEnPassantSquare(long miscData) {
+        return (int)((miscData >> 5) & 0x3F);
+    }
 
     // ##########################################################################
     // VARIOUS METHODS FOR MAKING AND FINDING MOVES.
@@ -339,10 +379,48 @@ public class BitboardBoard {
         return 0;
     }
 
+    // For checking castling rights.
+    public static long getAllAttacks(long[] board, boolean white) {
+        long attacks = 0L;
+
+        attacks |= white ? whiteKingCaptures(board) : blackKingCaptures(board);
+        attacks |= white ? whitePawnLeftCaptures(board) : blackPawnLeftCaptures(board);
+        attacks |= white ? whitePawnRightCaptures(board) : blackPawnRightCaptures(board);
+
+        long knights = white ? board[4] : board[10];
+        for (int i = 0; i < Long.bitCount(knights); i++) {
+            int square = Long.numberOfTrailingZeros(knights);
+            attacks |= white ? whiteKnightCaptures(square, board) : blackKnightCaptures(square, board);
+            knights &= knights - 1;
+        }
+        long bishops = white ? board[5] : board[11];
+        for (int i = 0; i < Long.bitCount(bishops); i++) {
+            int square = Long.numberOfTrailingZeros(bishops);
+            attacks |= white ? whiteBishopCaptures(square, board) : blackBishopCaptures(square, board);
+            bishops &= bishops - 1;
+        }
+        long rooks = white ? board[6] : board[12];
+        for (int i = 0; i < Long.bitCount(rooks); i++) {
+            int square = Long.numberOfTrailingZeros(rooks);
+            attacks |= white ? whiteRookCaptures(square, board) : blackRookCaptures(square, board);
+            rooks &= rooks - 1;
+        }
+        long queens = white ? board[7] : board[13];
+        for (int i = 0; i < Long.bitCount(queens); i++) {
+            int square = Long.numberOfTrailingZeros(queens);
+            attacks |= white ? whiteQueenCaptures(square, board) : blackQueenCaptures(square, board);
+            queens &= queens - 1;
+        }
+
+        return attacks;
+    }
+
     public static int[] getAllMoves(long[] board, boolean white) {
         // Setting a large size for the array so it won't run out of space.
         int[] moves = new int[256];
         int moveCount = 0;
+        long enemyAttacks = getAllAttacks(board, !white);
+        boolean[] castlingRights = getCastlingRights(board[15]);
 
         // This method doesn't have any logic for determining which moves are best, except that captures are always at the start of the array and therefore examined first.
 
@@ -351,16 +429,49 @@ public class BitboardBoard {
         long pawnLeftCaptures = white ? whitePawnLeftCaptures(board) : blackPawnLeftCaptures(board);
         for (int i =  Long.bitCount(pawnRightCaptures); i > 0; i--) {
             int targetSquare = Long.numberOfTrailingZeros(pawnRightCaptures);
-            // TODO: create promotion logic.
-            moves[moveCount++] = encodeMove((white ? targetSquare-9 : targetSquare+9), targetSquare, 0, getPieceType(targetSquare, board, white), 0, false, false);
+            int originSquare = white ? targetSquare - 9 : targetSquare + 9;
+            if (white ? targetSquare > 55 : targetSquare < 8) {
+                moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, getPieceType(targetSquare, board, white), 0, false, false);
+            } else {
+                for (int j = 2; j <= 5; j++) { // Promotion moves.
+                    moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, getPieceType(targetSquare, board, white), j, false, false);
+                }
+            }
             pawnRightCaptures &= pawnRightCaptures - 1;
         }
 
         for (int i = Long.bitCount(pawnLeftCaptures); i > 0; i--) {
             int targetSquare = Long.numberOfTrailingZeros(pawnLeftCaptures);
-            // TODO: add promotion logic here once created.
-            moves[moveCount++] = encodeMove((white ? targetSquare-7 : targetSquare+7), targetSquare, 0, getPieceType(targetSquare, board, white), 0, false, false);
+            int originSquare = white ? targetSquare - 7 : targetSquare + 7;
+            if (white ? targetSquare > 55 : targetSquare < 8) {
+                moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, getPieceType(targetSquare, board, white), 0, false, false);
+            } else {
+                for (int j = 2; j <= 5; j++) { // Promotion moves.
+                    moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, getPieceType(targetSquare, board, white), j, false, false);
+                }
+            }
             pawnLeftCaptures &= pawnLeftCaptures - 1;
+        }
+
+        // En passant captures.
+        // It's impossible to en passant to the 1st or 8th rank, so we don't need to check for promotions.
+        // There can also be at most one en passant square, so no need to loop through the pawns.
+        // And naturally, the captured piece is always a pawn.
+        if (getEnPassantSquare(board[15]) != 0) {
+            long epRightCaptures = white ? whitePawnRightEnPassant(board) : blackPawnRightEnPassant(board);
+            long epLeftCaptures = white ? whitePawnLeftEnPassant(board) : blackPawnLeftEnPassant(board);
+
+            if (epRightCaptures != 0L) {
+                int targetSquare = Long.numberOfTrailingZeros(epRightCaptures);
+                int originSquare = white ? targetSquare - 9 : targetSquare + 9;
+                moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, 1, 0, true, false);
+            }
+
+            if (epLeftCaptures != 0L) {
+                int targetSquare = Long.numberOfTrailingZeros(epLeftCaptures);
+                int originSquare = white ? targetSquare - 7 : targetSquare + 7;
+                moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, 1, 0, true, false);
+            }
         }
 
         // Knight captures.
@@ -424,9 +535,42 @@ public class BitboardBoard {
             kingCaptures &= kingCaptures - 1;
         }
 
+        // Castling moves.
+
+        // Kingside.
+        if (white ? castlingRights[0] : castlingRights[2]) {
+            boolean pathClear = ((board[0] & (white ? (1L << 5 | 1L << 6) : (1L << 61 | 1L << 62))) == 0L);
+            boolean safeSquares = ((enemyAttacks & (white ? (1L << 4 | 1L << 5 | 1L << 6) : (1L << 60 | 1L << 61 | 1L << 62))) == 0L);
+
+            if (pathClear && safeSquares) {
+                moves[moveCount++] = encodeMove(white ? 4 : 60, white ? 6 : 62, 6, 0, 0, false, true);
+            }
+        }
+
+        // Queenside.
+        if (white ? castlingRights[1] : castlingRights[3]) {
+            boolean pathClear = ((board[0] & (white ? (1L << 1 | 1L << 2 | 1L << 3) : (1L << 57 | 1L << 58 | 1L << 59))) == 0L);
+            boolean safeSquares = ((enemyAttacks & (white ? (1L << 2 | 1L << 3 | 1L << 4) : (1L << 58 | 1L << 59 | 1L << 60))) == 0L);
+
+            if (pathClear && safeSquares) {
+                moves[moveCount++] = encodeMove(white ? 4 : 60, white ? 2 : 62, 6, 0, 0, false, true);
+            }
+        }
+
         // Pawn moves.
         long pawnMoves = white ? whitePawnMoves(board) : blackPawnMoves(board);
-        // TODO: add logic.
+        for (int i = Long.bitCount(pawnMoves); i > 0; i--) {
+            int targetSquare = Long.numberOfTrailingZeros(pawnMoves);
+            int originSquare = white ? targetSquare - 8 : targetSquare + 8;
+            if (white ? targetSquare > 55 : targetSquare < 8) {
+                moves[moveCount++] = encodeMove(originSquare, targetSquare, 0, 0, 0, false, false);
+            } else {
+                for (int j = 2; j <= 5; j++) { // Promotion moves.
+                    moves[moveCount++] = encodeMove(originSquare, targetSquare, 0, 0, j, false, false);
+                }
+            }
+            pawnMoves &= pawnMoves - 1;
+        }
 
         // Knight moves.
         knights = white ? board[4] : board[10];
@@ -499,6 +643,11 @@ public class BitboardBoard {
     // The getPiece() method returns 1 for pawns, 2 for knights, 3 for bishops, 4 for rooks, 5 for queens, and 6 for kings.
     // We need to add 2 to the piece type to get the index of the board for white pieces (3-8), and 8 to get the index for black pieces (9-14).
 
+    // TODO: probably add a method to update the canonical board if we aren't going to stick with the 2D array for that.
+    // I guess I could also just use the return value to update the board, so that's probably redundant.
+
+    // TODO: add en passant and castling logic.
+
     // Fun fact: I originally made makeMove() and undoMove() methods, but then I realised that XOR is reversible, so it was just two identical methods.
     // I know that's not *surprising*, but I just blew my own mind.
     public static long[] makeOrUndoMove(long[] board, int move, boolean white) {
@@ -524,6 +673,82 @@ public class BitboardBoard {
             }
         }
 
+        return board;
+    }
+
+    // ############################################################################
+    // IO METHODS.
+
+    public static Piece getPieceAtSquare(int square, long[] board) {
+        if ((board[0] & (1L << square)) == 0L) return null; // If the square is empty, return null.
+        boolean white = ((board[1] & (1L << square)) != 0L); // If the square is occupied by a white piece, set white to true.
+
+        int pieceType = getPieceType(square, board, white);
+        int rank = square / 8;
+        int file = square % 8;
+
+        Piece p = null;
+
+        switch (pieceType) {
+            case 1 -> p = new Pawn(white, rank, file);
+            case 2 -> p = new Knight(white, rank, file);
+            case 3 -> p = new Bishop(white, rank, file);
+            case 4 -> p = new Rook(white, rank, file);
+            case 5 -> p = new Queen(white, rank, file);
+            case 6 -> p = new King(white, rank, file);
+        }
+
+        return p;
+    }
+
+    // Do we need a reverse of this?
+    // TODO: double-check that this is actually getting the right squares.
+    public static Board bitboardToBoard(long[] board) {
+        Board b = new Board();
+        for (int i = 0; i < 64; i++) {
+            int rank = i / 8;
+            int file = i % 8;
+            Piece p = getPieceAtSquare((i ^ 63), board); // The 2D array counts from the top left, but the bitboard counts from the bottom right, so we XOR by 63 to get the opposite square.
+            b.board[rank][file] = p;
+        }
+        return b;
+    }
+
+    // TODO: IO methods: bitboard to board and FEN string to bitboard.
+
+    // TODO: check later.
+    public static String bitboardToFENString(long[] board) {
+        StringBuilder fen = new StringBuilder();
+        for (int rank = 7; rank >= 0; rank--) {
+            int emptyCount = 0;
+            for (int file = 0; file < 8; file++) {
+                Piece piece = getPieceAtSquare(rank * 8 + file, board);
+                if (piece == null) {
+                    emptyCount++;
+                } else {
+                    if (emptyCount > 0) {
+                        fen.append(emptyCount);
+                        emptyCount = 0;
+                    }
+                    fen.append(piece.getFENChar());
+                }
+            }
+            if (emptyCount > 0) {
+                fen.append(emptyCount);
+            }
+            if (rank > 0) {
+                fen.append("/");
+            }
+        }
+        fen.append(" ");
+        fen.append(isWhiteToMove(board[15]) ? "w" : "b");
+        // TODO: add the rest.
+        return fen.toString();
+    }
+
+    public static long[] FENStringToBitboard(String FENString) {
+        long[] board = new long[16];
+        // TODO: implement this.
         return board;
     }
 
