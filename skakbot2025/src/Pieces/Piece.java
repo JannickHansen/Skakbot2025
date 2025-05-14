@@ -34,4 +34,26 @@ public abstract class Piece {
     public boolean isWhite() { return isWhite; }
     public int getRow()    { return row; }
     public int getCol()    { return col; }
+    public String getFENChar() {
+        if (isWhite) {
+            switch (this.getClass().getSimpleName()) {
+                case "Pawn":   return "P";
+                case "Knight": return "N";
+                case "Bishop": return "B";
+                case "Rook":   return "R";
+                case "Queen":  return "Q";
+                case "King":   return "K";
+            }
+        } else {
+            switch (this.getClass().getSimpleName()) {
+                case "Pawn":   return "p";
+                case "Knight": return "n";
+                case "Bishop": return "b";
+                case "Rook":   return "r";
+                case "Queen":  return "q";
+                case "King":   return "k";
+            }
+        }
+        return null;
+    }
 }
