@@ -12,46 +12,52 @@ public class LookupTableGeneration {
     public static long[] generateKingLookupTable() {
 
         long[] moves = new long[64];
-
         int[] offsets = {1, -1, 8, -8, 7, -7, 9, -9};
 
         for (int i = 0; i < 64; i++) {
             long king = 1L << i;
             long validMoves = 0L;
+            int rank = i / 8;
+            int file = i % 8;
 
             for (int offset : offsets) {
                 int targetSquare = i + offset;
-                if (targetSquare >= 0 && targetSquare < 64) { // Check to see if the move goes out of bounds.
-                    long move = king << offset;
-                    validMoves |= move;
+                int targetRank = targetSquare / 8;
+                int targetFile = targetSquare % 8;
+
+                if (targetSquare >= 0 && targetSquare < 64 &&
+                        Math.abs(targetRank - rank) <= 1 && Math.abs(targetFile - file) <= 1) {
+                    validMoves |= (1L << targetSquare);
                 }
             }
             moves[i] = validMoves;
         }
-
         return moves;
     }
 
     public static long[] generateKnightLookupTable() {
-
         long[] moves = new long[64];
-
         int[] offsets = {15, 17, -15, -17, 6, 10, -6, -10};
 
         for (int i = 0; i < 64; i++) {
             long knight = 1L << i;
             long validMoves = 0L;
+            int rank = i / 8;
+            int file = i % 8;
 
             for (int offset : offsets) {
                 int targetSquare = i + offset;
-                if (targetSquare >= 0 && targetSquare < 64) { // Check to see if the move goes out of bounds.
-                    long move = offset > 0 ? (knight << offset) : (knight >>> -offset);
-                    validMoves |= move;
+                int targetRank = targetSquare / 8;
+                int targetFile = targetSquare % 8;
+
+                if (targetSquare >= 0 && targetSquare < 64 &&
+                        Math.abs(targetRank - rank) <= 2 && Math.abs(targetFile - file) <= 2 &&
+                        Math.abs(targetRank - rank) + Math.abs(targetFile - file) == 3) {
+                    validMoves |= (1L << targetSquare);
                 }
             }
             moves[i] = validMoves;
         }
-
         return moves;
     }
 

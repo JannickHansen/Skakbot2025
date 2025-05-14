@@ -147,19 +147,19 @@ public static long blackPawnMoves(long[] board) {
 }
 
     public static long whitePawnRightCaptures(long[] board) {
-        return (board[3] << 9) & board[2] & 0x7F7F7F7F7F7F7F7FL;
+        return (board[3] << 9) & board[2] & 0xFEFEFEFEFEFEFEFEL;
     }
 
     public static long whitePawnLeftCaptures(long[] board){
-        return (board[3] << 7) & board[2] & 0xFEFEFEFEFEFEFEFEL;
+        return (board[3] << 7) & board[2] & 0x7F7F7F7F7F7F7F7FL;
     }
 
     public static long blackPawnRightCaptures(long[] board) {
-        return (board[9] >> 9) & board[1] & 0x7F7F7F7F7F7F7F7FL;
+        return (board[9] >> 9) & board[1] & 0xFEFEFEFEFEFEFEFEL;
     }
 
     public static long blackPawnLeftCaptures(long[] board) {
-        return (board[9] >> 7) & board[1] & 0xFEFEFEFEFEFEFEFEL;
+        return (board[9] >> 7) & board[1] & 0x7F7F7F7F7F7F7F7FL;
     }
 
     public static long whitePawnRightEnPassant(long[] board) {
@@ -482,10 +482,10 @@ public static long blackPawnMoves(long[] board) {
         // Pawn captures.
         long pawnRightCaptures = white ? whitePawnRightCaptures(board) : blackPawnRightCaptures(board);
         long pawnLeftCaptures = white ? whitePawnLeftCaptures(board) : blackPawnLeftCaptures(board);
-        for (int i =  Long.bitCount(pawnRightCaptures); i > 0; i--) {
+        while (pawnRightCaptures != 0L) {
             int targetSquare = Long.numberOfTrailingZeros(pawnRightCaptures);
             int originSquare = white ? targetSquare - 9 : targetSquare + 9;
-            if (white ? targetSquare > 55 : targetSquare < 8) {
+            if (white ? targetSquare < 55 : targetSquare > 8) {
                 moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, getPieceType(targetSquare, board, white), 0, false, false, false, false, enPassantFile);
             } else {
                 for (int j = 2; j <= 5; j++) { // Promotion moves.
@@ -495,10 +495,10 @@ public static long blackPawnMoves(long[] board) {
             pawnRightCaptures &= pawnRightCaptures - 1;
         }
 
-        for (int i = Long.bitCount(pawnLeftCaptures); i > 0; i--) {
+        while (pawnLeftCaptures != 0L) {
             int targetSquare = Long.numberOfTrailingZeros(pawnLeftCaptures);
             int originSquare = white ? targetSquare - 7 : targetSquare + 7;
-            if (white ? targetSquare > 55 : targetSquare < 8) {
+            if (white ? targetSquare < 55 : targetSquare > 8) {
                 moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, getPieceType(targetSquare, board, white), 0, false, false, false, false, enPassantFile);
             } else {
                 for (int j = 2; j <= 5; j++) { // Promotion moves.
@@ -531,10 +531,10 @@ public static long blackPawnMoves(long[] board) {
 
         // Knight captures.
         long knights = white ? board[4] : board[10];
-        for (int i = 0; i < Long.bitCount(knights); i++) {
+        while (knights != 0L) {
             int square = Long.numberOfTrailingZeros(knights);
             long knightCaptures = white ? whiteKnightCaptures(square, board) : blackKnightCaptures(square, board);
-            for (int j = Long.bitCount(knightCaptures); j > 0; j--) {
+            while (knightCaptures != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(knightCaptures);
                 moves[moveCount++] = encodeMove(square, targetSquare, 2, getPieceType(targetSquare, board, white), 0, false, false, false, false, enPassantFile);
                 knightCaptures &= knightCaptures - 1;
@@ -544,10 +544,10 @@ public static long blackPawnMoves(long[] board) {
 
         // Bishop captures.
         long bishops = white ? board[5] : board[11];
-        for (int i = 0; i < Long.bitCount(bishops); i++) {
+        while (bishops != 0L) {
             int square = Long.numberOfTrailingZeros(bishops);
             long bishopCaptures = white ? whiteBishopCaptures(square, board) : blackBishopCaptures(square, board);
-            for (int j = Long.bitCount(bishopCaptures); j > 0; j--) {
+            while (bishopCaptures != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(bishopCaptures);
                 moves[moveCount++] = encodeMove(square, targetSquare, 3, getPieceType(targetSquare, board, white), 0, false, false, false, false, enPassantFile);
                 bishopCaptures &= bishopCaptures - 1;
@@ -557,10 +557,10 @@ public static long blackPawnMoves(long[] board) {
 
         // Rook captures.
         long rooks = white ? board[6] : board[12];
-        for (int i = 0; i < Long.bitCount(rooks); i++) {
+        while (rooks != 0L) {
             int square = Long.numberOfTrailingZeros(rooks);
             long rookCaptures = white ? whiteRookCaptures(square, board) : blackRookCaptures(square, board);
-            for (int j = Long.bitCount(rookCaptures); j > 0; j--) {
+            while (rookCaptures != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(rookCaptures);
                 moves[moveCount++] = encodeMove(square, targetSquare, 4, getPieceType(targetSquare, board, white), 0, false, false, square == (white ? 7 : 63) && castlingRights[(white ? 0 : 2)], square == (white ? 0 : 56) && castlingRights[(white ? 1 : 3)], enPassantFile);
                 rookCaptures &= rookCaptures - 1;
@@ -570,10 +570,10 @@ public static long blackPawnMoves(long[] board) {
 
         // Queen captures.
         long queens = white ? board[7] : board[13];
-        for (int i = 0; i < Long.bitCount(queens); i++) {
+        while (queens != 0L) {
             int square = Long.numberOfTrailingZeros(queens);
             long queenCaptures = white ? whiteQueenCaptures(square, board) : blackQueenCaptures(square, board);
-            for (int j = Long.bitCount(queenCaptures); j > 0; j--) {
+            while (queenCaptures != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(queenCaptures);
                 moves[moveCount++] = encodeMove(square, targetSquare, 5, getPieceType(targetSquare, board, white), 0, false, false, false, false, enPassantFile);
                 queenCaptures &= queenCaptures - 1;
@@ -584,7 +584,7 @@ public static long blackPawnMoves(long[] board) {
         // King captures.
         int kingSquare = Long.numberOfTrailingZeros(white ? board[8] : board[14]);
         long kingCaptures = white ? whiteKingCaptures(board) : blackKingCaptures(board);
-        for (int j = Long.bitCount(kingCaptures); j > 0; j--) {
+        while (kingCaptures != 0L) {
             int targetSquare = Long.numberOfTrailingZeros(kingCaptures);
             moves[moveCount++] = encodeMove(kingSquare, targetSquare, 6, getPieceType(targetSquare, board, white), 0, false, false, castlingRights[(white ? 0 : 2)], castlingRights[(white ? 1 : 3)], enPassantFile);
             kingCaptures &= kingCaptures - 1;
@@ -614,14 +614,14 @@ public static long blackPawnMoves(long[] board) {
 
         // Pawn moves.
         long pawnMoves = white ? whitePawnMoves(board) : blackPawnMoves(board);
-        for (int i = Long.bitCount(pawnMoves); i > 0; i--) {
+        while (pawnMoves != 0L) {
             int targetSquare = Long.numberOfTrailingZeros(pawnMoves);
             int originSquare = white ? targetSquare - 8 : targetSquare + 8;
-            if (white ? targetSquare > 55 : targetSquare < 8) {
-                moves[moveCount++] = encodeMove(originSquare, targetSquare, 0, 0, 0, false, false, false, false, enPassantFile);
+            if (white ? targetSquare < 55 : targetSquare > 8) {
+                moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, 0, 0, false, false, false, false, enPassantFile);
             } else {
                 for (int j = 2; j <= 5; j++) { // Promotion moves.
-                    moves[moveCount++] = encodeMove(originSquare, targetSquare, 0, 0, j, false, false, false, false, enPassantFile);
+                    moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, 0, j, false, false, false, false, enPassantFile);
                 }
             }
             pawnMoves &= pawnMoves - 1;
@@ -629,10 +629,10 @@ public static long blackPawnMoves(long[] board) {
 
         // Knight moves.
         knights = white ? board[4] : board[10];
-        for (int i = 0; i < Long.bitCount(knights); i++) {
+        while (knights != 0L) {
             int square = Long.numberOfTrailingZeros(knights);
             long knightMoves = knightMoves(square, board);
-            for (int j = Long.bitCount(knightMoves); j > 0; j--) {
+            while (knightMoves != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(knightMoves);
                 moves[moveCount++] = encodeMove(square, targetSquare, 2, 0, 0, false, false, false, false, enPassantFile);
                 knightMoves &= knightMoves - 1;
@@ -642,10 +642,10 @@ public static long blackPawnMoves(long[] board) {
 
         // Bishop moves.
         bishops = white ? board[5] : board[11];
-        for (int i = 0; i < Long.bitCount(bishops); i++) {
+        while (bishops != 0L) {
             int square = Long.numberOfTrailingZeros(bishops);
             long bishopMoves = bishopMoves(square, board);
-            for (int j = Long.bitCount(bishopMoves); j > 0; j--) {
+            while (bishopMoves != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(bishopMoves);
                 moves[moveCount++] = encodeMove(square, targetSquare, 3, 0, 0, false, false, false, false, enPassantFile);
                 bishopMoves &= bishopMoves - 1;
@@ -655,10 +655,10 @@ public static long blackPawnMoves(long[] board) {
 
         // Rook moves.
         rooks = white ? board[6] : board[12];
-        for (int i = 0; i < Long.bitCount(rooks); i++) {
+        while (rooks != 0L) {
             int square = Long.numberOfTrailingZeros(rooks);
             long rookMoves = rookMoves(square, board);
-            for (int j = Long.bitCount(rookMoves); j > 0; j--) {
+            while (rookMoves != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(rookMoves);
                 moves[moveCount++] = encodeMove(square, targetSquare, 4, 0, 0, false, false, square == (white ? 7 : 63) && castlingRights[(white ? 0 : 2)], square == (white ? 0 : 56) && castlingRights[(white ? 1 : 3)], enPassantFile);
                 rookMoves &= rookMoves - 1;
@@ -668,10 +668,10 @@ public static long blackPawnMoves(long[] board) {
 
         // Queen moves.
         queens = white ? board[7] : board[13];
-        for (int i = 0; i < Long.bitCount(queens); i++) {
+        while (queens != 0L) {
             int square = Long.numberOfTrailingZeros(queens);
             long queenMoves = queenMoves(square, board);
-            for (int j = Long.bitCount(queenMoves); j > 0; j--) {
+            while (queenMoves != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(queenMoves);
                 moves[moveCount++] = encodeMove(square, targetSquare, 5, 0, 0, false, false, false, false, enPassantFile);
                 queenMoves &= queenMoves - 1;
@@ -682,7 +682,7 @@ public static long blackPawnMoves(long[] board) {
         // King moves.
         kingSquare = Long.numberOfTrailingZeros(white ? board[8] : board[14]);
         long kingMoves = white ? whiteKingMoves(board) : blackKingMoves(board);
-        for (int j = Long.bitCount(kingMoves); j > 0; j--) {
+        while (kingMoves != 0L) {
             int targetSquare = Long.numberOfTrailingZeros(kingMoves);
             moves[moveCount++] = encodeMove(kingSquare, targetSquare, 6, 0, 0, false, false, castlingRights[(white ? 0 : 2)], castlingRights[(white ? 1 : 3)], enPassantFile);
             kingMoves &= kingMoves - 1;
