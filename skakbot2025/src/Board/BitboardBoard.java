@@ -37,9 +37,13 @@ public class BitboardBoard {
     static long[] rookMagicNumbers = new long[64];
     static int[] rookShifts = new int[64];
 
-
     public BitboardBoard() {
         initialiseBoard();
+        generateLookupTables();
+    }
+
+    public long[] getRawBoard() {
+        return board;
     }
 
     // I'm not sure if this should just be part of the constructor; will we ever need to create multiple instances of this class?
@@ -278,19 +282,33 @@ public class BitboardBoard {
     // CHECK CHECKS (PUN INTENDED).
 
     public static boolean isInCheck(long[] board, boolean white) {
-        // First we find the king's position.
-        int kingSquare = Long.numberOfTrailingZeros(board[white ? 8 : 14]);
+        long kingBB = board[ white ? 8 : 14 ];
+        if (kingBB == 0L) return false;
+        int kingSq = Long.numberOfTrailingZeros(kingBB);
 
-        // Then we check from the king's square to all the squares that can attack it and see if any of them are occupied by an enemy piece.
-        // For obvious reasons, we don't need to check the enemy king's moves.
+        long pawnAttacks = white
+                ? (blackPawnRightCaptures(board) | blackPawnLeftCaptures(board))
+                : (whitePawnRightCaptures(board) | whitePawnLeftCaptures(board));
+        if ((pawnAttacks & kingBB) != 0L) return true;
 
-        // We check whether any pawn captures for the opposite colour overlap with the king's position, then whether any non-king piece in the king's position can see a corresponding piece of the opposite colour.
-        return ((white ? blackPawnRightCaptures(board) : whitePawnRightCaptures(board)) & board[white ? 8 : 14]) != 0L ||
-                ((white ? blackPawnLeftCaptures(board) : whitePawnLeftCaptures(board)) & board[white ? 8 : 14]) != 0L ||
-                ((white ? whiteKnightCaptures(kingSquare, board) : blackKnightCaptures(kingSquare, board)) & board[white ? 10 : 4]) != 0L ||
-                ((white ? whiteBishopCaptures(kingSquare, board) : blackBishopCaptures(kingSquare, board)) & (board[white ? 11 : 5] | board[white ? 13 : 7])) != 0L ||
-                ((white ? whiteRookCaptures(kingSquare, board) : blackRookCaptures(kingSquare, board)) & (board[white ? 12 : 6] | board[white ? 13 : 7])) != 0L;
+        long knightAttacks = knightLookupTable[kingSq] & (white ? board[10] : board[4]);
+        if (knightAttacks != 0L) return true;
 
+        int bIndex = (int)((board[0] & bishopMasks[kingSq])
+                * bishopMagicNumbers[kingSq]
+                >>> bishopShifts[kingSq]);
+        long bishopAttacks = bishopLookupTable[kingSq][bIndex];
+        long enemyBishops = white ? (board[11] | board[13]) : (board[5] | board[7]);
+        if ((bishopAttacks & enemyBishops) != 0L) return true;
+
+        int rIndex = (int)((board[0] & rookMasks[kingSq])
+                * rookMagicNumbers[kingSq]
+                >>> rookShifts[kingSq]);
+        long rookAttacks = rookLookupTable[kingSq][rIndex];
+        long enemyRooks = white ? (board[12] | board[13]) : (board[6] | board[7]);
+        if ((rookAttacks & enemyRooks) != 0L) return true;
+
+        return false;
     }
 
     // ##########################################################################

@@ -1,6 +1,6 @@
 package Evaluation;
 
-class PieceSquareTables{
+public class PieceSquareTables{
     // Set shorthands for the piece types to make them easier to read and reference.
     public static final int WP = 0; // White pawn.
     public static final int WN = 1; // White knight.
