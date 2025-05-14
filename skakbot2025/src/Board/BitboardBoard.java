@@ -332,15 +332,16 @@ public static long blackPawnMoves(long[] board) {
     // 4 = rook.
     // 5 = queen.
     // 6 = king.
-    public static int encodeMove(int from, int to, int piece, int captured, int promotion, boolean isEP, boolean isCastle, boolean kingSideCastlingRightsChanged, boolean queenSideCastlingRightsChanged, int enPassantFile) {
-        return (from) | (to << 6) | (piece << 12) | (captured << 16) | (promotion << 20) | ((isEP ? 1 : 0) << 24) | ((isCastle ? 1 : 0) << 25) |
+    public static int encodeMove(int from, int to, int piece, boolean white, int captured, int promotion, boolean isEP, boolean isCastle, boolean kingSideCastlingRightsChanged, boolean queenSideCastlingRightsChanged, int enPassantFile) {
+        return (from) | (to << 6) | (piece << 12) | ((white ? 1 : 0) << 15) | (captured << 16) | (promotion << 20) | ((isEP ? 1 : 0) << 24) | ((isCastle ? 1 : 0) << 25) |
                 ((enPassantFile != -1 ? 1 : 0) << 26) | ((kingSideCastlingRightsChanged ? 1 : 0) << 27) | ((queenSideCastlingRightsChanged ? 1 : 0) << 28) | (enPassantFile << 29);
     }
 
     // Apparently these are efficient enough that there's no advantage to hardcoding the logic.
     public static int getFrom(int move)       { return move & 0x3F; }  // Bits 0-5
     public static int getTo(int move)         { return (move >>> 6) & 0x3F; }  // Bits 6-11
-    public static int getPiece(int move)      { return (move >>> 12) & 0xF; }  // Bits 12-15
+    public static int getPiece(int move)      { return (move >>> 12) & 0x7; }  // Bits 12-14
+    public static boolean isWhite(int move)     { return ((move >>> 15) & 1) != 0; }  // Bit 15
     public static int getCaptured(int move)   { return (move >>> 16) & 0xF; }  // Bits 16-19
     public static int getPromotion(int move)  { return (move >>> 20) & 0xF; }  // Bits 20-23
     public static boolean isEnPassant(int move) { return ((move >>> 24) & 1) != 0; }  // Bit 24
@@ -486,10 +487,10 @@ public static long blackPawnMoves(long[] board) {
             int targetSquare = Long.numberOfTrailingZeros(pawnRightCaptures);
             int originSquare = white ? targetSquare - 9 : targetSquare + 9;
             if (white ? targetSquare < 55 : targetSquare > 8) {
-                moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, getPieceType(targetSquare, board, white), 0, false, false, false, false, enPassantFile);
+                moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, white, getPieceType(targetSquare, board, white), 0, false, false, false, false, enPassantFile);
             } else {
                 for (int j = 2; j <= 5; j++) { // Promotion moves.
-                    moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, getPieceType(targetSquare, board, white), j, false, false, false, false, enPassantFile);
+                    moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, white, getPieceType(targetSquare, board, white), j, false, false, false, false, enPassantFile);
                 }
             }
             pawnRightCaptures &= pawnRightCaptures - 1;
@@ -499,10 +500,10 @@ public static long blackPawnMoves(long[] board) {
             int targetSquare = Long.numberOfTrailingZeros(pawnLeftCaptures);
             int originSquare = white ? targetSquare - 7 : targetSquare + 7;
             if (white ? targetSquare < 55 : targetSquare > 8) {
-                moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, getPieceType(targetSquare, board, white), 0, false, false, false, false, enPassantFile);
+                moves[moveCount++] = encodeMove(originSquare, targetSquare, 1,white, getPieceType(targetSquare, board, white), 0, false, false, false, false, enPassantFile);
             } else {
                 for (int j = 2; j <= 5; j++) { // Promotion moves.
-                    moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, getPieceType(targetSquare, board, white), j, false, false, false, false, enPassantFile);
+                    moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, white, getPieceType(targetSquare, board, white), j, false, false, false, false, enPassantFile);
                 }
             }
             pawnLeftCaptures &= pawnLeftCaptures - 1;
@@ -519,13 +520,13 @@ public static long blackPawnMoves(long[] board) {
             if (epRightCaptures != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(epRightCaptures);
                 int originSquare = white ? targetSquare - 9 : targetSquare + 9;
-                moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, 1, 0, true, false, false, false, enPassantFile);
+                moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, white, 1, 0, true, false, false, false, enPassantFile);
             }
 
             if (epLeftCaptures != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(epLeftCaptures);
                 int originSquare = white ? targetSquare - 7 : targetSquare + 7;
-                moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, 1, 0, true, false, false, false, enPassantFile);
+                moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, white, 1, 0, true, false, false, false, enPassantFile);
             }
         }
 
@@ -536,7 +537,7 @@ public static long blackPawnMoves(long[] board) {
             long knightCaptures = white ? whiteKnightCaptures(square, board) : blackKnightCaptures(square, board);
             while (knightCaptures != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(knightCaptures);
-                moves[moveCount++] = encodeMove(square, targetSquare, 2, getPieceType(targetSquare, board, white), 0, false, false, false, false, enPassantFile);
+                moves[moveCount++] = encodeMove(square, targetSquare, 2, white, getPieceType(targetSquare, board, white), 0, false, false, false, false, enPassantFile);
                 knightCaptures &= knightCaptures - 1;
             }
             knights &= knights - 1;
@@ -549,7 +550,7 @@ public static long blackPawnMoves(long[] board) {
             long bishopCaptures = white ? whiteBishopCaptures(square, board) : blackBishopCaptures(square, board);
             while (bishopCaptures != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(bishopCaptures);
-                moves[moveCount++] = encodeMove(square, targetSquare, 3, getPieceType(targetSquare, board, white), 0, false, false, false, false, enPassantFile);
+                moves[moveCount++] = encodeMove(square, targetSquare, 3, white, getPieceType(targetSquare, board, white), 0, false, false, false, false, enPassantFile);
                 bishopCaptures &= bishopCaptures - 1;
             }
             bishops &= bishops - 1;
@@ -562,7 +563,7 @@ public static long blackPawnMoves(long[] board) {
             long rookCaptures = white ? whiteRookCaptures(square, board) : blackRookCaptures(square, board);
             while (rookCaptures != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(rookCaptures);
-                moves[moveCount++] = encodeMove(square, targetSquare, 4, getPieceType(targetSquare, board, white), 0, false, false, square == (white ? 7 : 63) && castlingRights[(white ? 0 : 2)], square == (white ? 0 : 56) && castlingRights[(white ? 1 : 3)], enPassantFile);
+                moves[moveCount++] = encodeMove(square, targetSquare, 4, white, getPieceType(targetSquare, board, white), 0, false, false, square == (white ? 7 : 63) && castlingRights[(white ? 0 : 2)], square == (white ? 0 : 56) && castlingRights[(white ? 1 : 3)], enPassantFile);
                 rookCaptures &= rookCaptures - 1;
             }
             rooks &= rooks - 1;
@@ -575,7 +576,7 @@ public static long blackPawnMoves(long[] board) {
             long queenCaptures = white ? whiteQueenCaptures(square, board) : blackQueenCaptures(square, board);
             while (queenCaptures != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(queenCaptures);
-                moves[moveCount++] = encodeMove(square, targetSquare, 5, getPieceType(targetSquare, board, white), 0, false, false, false, false, enPassantFile);
+                moves[moveCount++] = encodeMove(square, targetSquare, 5, white, getPieceType(targetSquare, board, white), 0, false, false, false, false, enPassantFile);
                 queenCaptures &= queenCaptures - 1;
             }
             queens &= queens - 1;
@@ -586,7 +587,7 @@ public static long blackPawnMoves(long[] board) {
         long kingCaptures = white ? whiteKingCaptures(board) : blackKingCaptures(board);
         while (kingCaptures != 0L) {
             int targetSquare = Long.numberOfTrailingZeros(kingCaptures);
-            moves[moveCount++] = encodeMove(kingSquare, targetSquare, 6, getPieceType(targetSquare, board, white), 0, false, false, castlingRights[(white ? 0 : 2)], castlingRights[(white ? 1 : 3)], enPassantFile);
+            moves[moveCount++] = encodeMove(kingSquare, targetSquare, 6, white, getPieceType(targetSquare, board, white), 0, false, false, castlingRights[(white ? 0 : 2)], castlingRights[(white ? 1 : 3)], enPassantFile);
             kingCaptures &= kingCaptures - 1;
         }
 
@@ -598,7 +599,7 @@ public static long blackPawnMoves(long[] board) {
             boolean safeSquares = ((enemyAttacks & (white ? (1L << 4 | 1L << 5 | 1L << 6) : (1L << 60 | 1L << 61 | 1L << 62))) == 0L);
 
             if (pathClear && safeSquares) {
-                moves[moveCount++] = encodeMove(white ? 4 : 60, white ? 6 : 62, 6, 0, 0, false, true, true, castlingRights[(white ? 1 : 3)], enPassantFile);
+                moves[moveCount++] = encodeMove(white ? 4 : 60, white ? 6 : 62, 6, white, 0, 0, false, true, true, castlingRights[(white ? 1 : 3)], enPassantFile);
             }
         }
 
@@ -608,7 +609,7 @@ public static long blackPawnMoves(long[] board) {
             boolean safeSquares = ((enemyAttacks & (white ? (1L << 2 | 1L << 3 | 1L << 4) : (1L << 58 | 1L << 59 | 1L << 60))) == 0L);
 
             if (pathClear && safeSquares) {
-                moves[moveCount++] = encodeMove(white ? 4 : 60, white ? 2 : 62, 6, 0, 0, false, true, castlingRights[(white ? 0 : 2)], true, enPassantFile);
+                moves[moveCount++] = encodeMove(white ? 4 : 60, white ? 2 : 62, 6, white, 0, 0, false, true, castlingRights[(white ? 0 : 2)], true, enPassantFile);
             }
         }
 
@@ -621,10 +622,10 @@ public static long blackPawnMoves(long[] board) {
                 originSquare = (white ? originSquare - 8 : originSquare + 8); // Double move.
             }
             if (white ? targetSquare < 55 : targetSquare > 8) {
-                moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, 0, 0, false, false, false, false, enPassantFile);
+                moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, white, 0, 0, false, false, false, false, enPassantFile);
             } else {
                 for (int j = 2; j <= 5; j++) { // Promotion moves.
-                    moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, 0, j, false, false, false, false, enPassantFile);
+                    moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, white, 0, j, false, false, false, false, enPassantFile);
                 }
             }
             pawnMoves &= pawnMoves - 1;
@@ -637,7 +638,7 @@ public static long blackPawnMoves(long[] board) {
             long knightMoves = knightMoves(square, board);
             while (knightMoves != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(knightMoves);
-                moves[moveCount++] = encodeMove(square, targetSquare, 2, 0, 0, false, false, false, false, enPassantFile);
+                moves[moveCount++] = encodeMove(square, targetSquare, 2, white, 0, 0, false, false, false, false, enPassantFile);
                 knightMoves &= knightMoves - 1;
             }
             knights &= knights - 1;
@@ -650,7 +651,7 @@ public static long blackPawnMoves(long[] board) {
             long bishopMoves = bishopMoves(square, board);
             while (bishopMoves != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(bishopMoves);
-                moves[moveCount++] = encodeMove(square, targetSquare, 3, 0, 0, false, false, false, false, enPassantFile);
+                moves[moveCount++] = encodeMove(square, targetSquare, 3, white, 0, 0, false, false, false, false, enPassantFile);
                 bishopMoves &= bishopMoves - 1;
             }
             bishops &= bishops - 1;
@@ -663,7 +664,7 @@ public static long blackPawnMoves(long[] board) {
             long rookMoves = rookMoves(square, board);
             while (rookMoves != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(rookMoves);
-                moves[moveCount++] = encodeMove(square, targetSquare, 4, 0, 0, false, false, square == (white ? 7 : 63) && castlingRights[(white ? 0 : 2)], square == (white ? 0 : 56) && castlingRights[(white ? 1 : 3)], enPassantFile);
+                moves[moveCount++] = encodeMove(square, targetSquare, 4, white, 0, 0, false, false, square == (white ? 7 : 63) && castlingRights[(white ? 0 : 2)], square == (white ? 0 : 56) && castlingRights[(white ? 1 : 3)], enPassantFile);
                 rookMoves &= rookMoves - 1;
             }
             rooks &= rooks - 1;
@@ -676,7 +677,7 @@ public static long blackPawnMoves(long[] board) {
             long queenMoves = queenMoves(square, board);
             while (queenMoves != 0L) {
                 int targetSquare = Long.numberOfTrailingZeros(queenMoves);
-                moves[moveCount++] = encodeMove(square, targetSquare, 5, 0, 0, false, false, false, false, enPassantFile);
+                moves[moveCount++] = encodeMove(square, targetSquare, 5, white, 0, 0, false, false, false, false, enPassantFile);
                 queenMoves &= queenMoves - 1;
             }
             queens &= queens - 1;
@@ -687,7 +688,7 @@ public static long blackPawnMoves(long[] board) {
         long kingMoves = white ? whiteKingMoves(board) : blackKingMoves(board);
         while (kingMoves != 0L) {
             int targetSquare = Long.numberOfTrailingZeros(kingMoves);
-            moves[moveCount++] = encodeMove(kingSquare, targetSquare, 6, 0, 0, false, false, castlingRights[(white ? 0 : 2)], castlingRights[(white ? 1 : 3)], enPassantFile);
+            moves[moveCount++] = encodeMove(kingSquare, targetSquare, 6, white, 0, 0, false, false, castlingRights[(white ? 0 : 2)], castlingRights[(white ? 1 : 3)], enPassantFile);
             kingMoves &= kingMoves - 1;
         }
 
@@ -707,7 +708,7 @@ public static long blackPawnMoves(long[] board) {
     // Fun fact: I originally made makeMove() and undoMove() methods, but then I realised that XOR is reversible, so it was just two identical methods.
     // I know that's not *surprising*, but I just blew my own mind.
     public static long[] makeOrUndoMove(long[] board, int move) {
-        boolean white = isWhiteToMove(board[15]);
+        boolean white = isWhite(move);
         if (white) {
             board[1] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the white pieces.
             board[getPiece(move)+2] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the piece type.
