@@ -415,7 +415,7 @@ public static long blackPawnMoves(long[] board) {
     public static int getPieceType(int square, long[] board, boolean white) {
         long sqMask = 1L << square;
 
-        if (white) {
+        if (!white) {
             if ((board[3] & sqMask) != 0L) return 1; // Pawn
             if ((board[4] & sqMask) != 0L) return 2; // Knight
             if ((board[5] & sqMask) != 0L) return 3; // Bishop
@@ -729,9 +729,11 @@ public static long blackPawnMoves(long[] board) {
                 if (getTo(move) == 6) { // Kingside.
                     board[0] ^= (1L << 5) | (1L << 7); // Update the 'all pieces' board.
                     board[1] ^= (1L << 5 | 1L << 7); // Update the 'white pieces' board.
+                    board[6] ^= (1L << 5 | 1L << 7); // Update the white rook board.
                 } else { // Queenside.
                     board[0] ^= (1L | 1L << 3); // Update the 'all pieces' board.
                     board[1] ^= (1L | 1L << 3); // Update the 'white pieces' board.
+                    board[6] ^= (1L | 1L << 3); // Update the white rook board.
                 }
             }
             if (getPromotion(move) != 0) { // If the move is a promotion, update the piece type.
@@ -758,9 +760,11 @@ public static long blackPawnMoves(long[] board) {
                 if (getTo(move) == 62) { // Kingside.
                     board[0] ^= (1L << 61) | (1L << 63); // Update the 'all pieces' board.
                     board[2] ^= (1L << 61 | 1L << 63); // Update the 'black pieces' board.
+                    board[12] ^= (1L << 61 | 1L << 63); // Update the black rook board.
                 } else { // Queenside.
                     board[0] ^= (1L << 56) | (1L << 59); // Update the 'all pieces' board.
                     board[2] ^= (1L << 56 | 1L << 59); // Update the 'black pieces' board.
+                    board[12] ^= (1L << 56 | 1L << 59); // Update the black rook board.
                 }
             }
             if (getPromotion(move) != 0) { // If the move is a promotion, update the piece type.
