@@ -14,6 +14,17 @@ public class ChessAI {
     private static final long TIME_LIMIT = 14_950_000_000L;
     private static final int ASPIRATION_WINDOW_VALUE = 150;
     private static final int MATE_SCORE = 1_000_000;
+
+    private static final int[][] ROOK_DIRS   = {{1,0},{-1,0},{0,1},{0,-1}};
+    private static final int[][] BISHOP_DIRS = {{1,1},{1,-1},{-1,1},{-1,-1}};
+    private static final int[][] QUEEN_DIRS;
+    static {
+        QUEEN_DIRS = new int[ROOK_DIRS.length + BISHOP_DIRS.length][2];
+        System.arraycopy(ROOK_DIRS, 0, QUEEN_DIRS, 0, ROOK_DIRS.length);
+        System.arraycopy(BISHOP_DIRS, 0, QUEEN_DIRS, ROOK_DIRS.length, BISHOP_DIRS.length);
+    }
+    private static final int[][] KNIGHT_JUMPS = {{2,1},{2,-1},{-2,1},{-2,-1},{1,2},{1,-2},{-1,2},{-1,-2}};
+    private static final int[][] KING_STEPS   = QUEEN_DIRS;
     private static final int[][] CENTER_CONTROL_BONUS = {
             {0,0,5,5,5,5,0,0},
             {0,5,10,10,10,10,5,0},
@@ -32,6 +43,7 @@ public class ChessAI {
     private static final int PV_BONUS      = 1_000_000;
     private static final int KILLER1_BONUS =   8_000;
     private static final int KILLER2_BONUS =   7_000;
+    private long currentHash;
     private static final long[][] ZOBRIST_PIECE_KEYS = new long[12][64];
     private static final long   ZOBRIST_SIDE_TO_MOVE;
     static {
@@ -48,6 +60,10 @@ public class ChessAI {
                 CENTER_CONTROL_BONUS[r][c] /= 2;
             }
         }
+    }
+
+    private boolean inBounds(int r, int c) {
+        return r >= 0 && r < 8 && c >= 0 && c < 8;
     }
 
     private static class TTEntry {
@@ -86,16 +102,35 @@ public class ChessAI {
 
     public void calculateAndMakeMoveAsync(Board board, boolean isWhite, Runnable onMoveComplete) {
         new Thread(() -> {
+            initializeHash(board, isWhite);
+
             Map<Long,Integer> rootRepeats = new HashMap<>();
-            long rootKey = computeZobrist(board, isWhite);
-            rootRepeats.put(rootKey, 1);
+            rootRepeats.put(currentHash, 1);
 
             Move best = getBestMoveWithTimeout(board, isWhite, TIME_LIMIT, rootRepeats);
+            boolean moved = false;
+
             if (best != null) {
-                makeMove(board, best, isWhite);
-                System.out.println("α/β cutoffs: " + cutoffCount +
-                        ", Depth finished: " + lastDepthReached);
+                moved = makeMove(board, best, isWhite);
+                if (moved) {
+                    System.out.println("α/β cutoffs: " + cutoffCount +
+                            ", Depth finished: " + lastDepthReached);
+                } else {
+                    System.err.println("⚠️ Failed to apply best move: " + best);
+                }
             }
+
+            if (!moved) {
+                List<Move> legal = generateAllMoves(board, isWhite, 1, null);
+                if (!legal.isEmpty()) {
+                    Move fallback = legal.get(0);
+                    makeMove(board, fallback, isWhite);
+                    System.out.println("✳️ Fallback move played: " + fallback);
+                } else {
+                    System.out.println("♟ No legal moves available. Game over.");
+                }
+            }
+
             if (onMoveComplete != null) onMoveComplete.run();
         }).start();
     }
@@ -177,7 +212,7 @@ public class ChessAI {
             return new ScoredMove(null, q);
         }
 
-        long key = computeZobrist(board, maxPlayer);
+        long key = currentHash;
         TTEntry ent = tt.get(key);
         if (ent != null && ent.depth >= depth) {
             if (ent.flag == 0) {
@@ -268,7 +303,7 @@ public class ChessAI {
 
         if (depth == rootDepth && bestMove != null) {
             makeMove(board, bestMove, maxPlayer);
-            long nextKey = computeZobrist(board, !maxPlayer);
+            long nextKey = currentHash;
             undoMove(board, bestMove);
             int repCnt = rootRepeats.getOrDefault(nextKey, 0);
             int staticEval = evaluateBoard(board) * (maxPlayer ? +1 : -1);
@@ -298,53 +333,7 @@ public class ChessAI {
             if (stand <= alpha) return alpha;
             beta = Math.min(beta, stand);
         }
-
-        List<Move> caps = new ArrayList<>();
-        Piece[][] arr = board.board;
-        for (int r = 0; r < 8; r++) {
-            for (int c = 0; c < 8; c++) {
-                Piece p = arr[r][c];
-                if (p == null || p.isWhite() != maxPlayer) continue;
-                for (int tr = 0; tr < 8; tr++) {
-                    for (int tc = 0; tc < 8; tc++) {
-                        if (!p.isValidMove(tr, tc, arr)) continue;
-                        if (arr[tr][tc] == null) continue;
-                        Move m = new Move(r, c, tr, tc, p, arr[tr][tc]);
-                        if (!makeMove(board, m, maxPlayer)) continue;
-                        caps.add(m);
-                        undoMove(board, m);
-                    }
-                }
-            }
-        }
-
-        for (int r = 0; r < 8; r++) {
-            for (int c = 0; c < 8; c++) {
-                Piece p = arr[r][c];
-                if (p == null || p.isWhite() != maxPlayer) continue;
-                for (int tr = 0; tr < 8; tr++) {
-                    for (int tc = 0; tc < 8; tc++) {
-                        if (!p.isValidMove(tr, tc, arr)) continue;
-                        if (arr[tr][tc] != null) continue;
-                        Move m = new Move(r, c, tr, tc, p, null);
-                        if (!makeMove(board, m, maxPlayer)) continue;
-                        if (board.isInCheck(!maxPlayer)) {
-                            caps.add(m);
-                        }
-                        undoMove(board, m);
-                    }
-                }
-            }
-        }
-
-        caps.sort((m1, m2) -> {
-            int cap2 = (m2.capturedPiece != null ? getPieceValue(m2.capturedPiece) : 0);
-            int mov2 = (m2.movedPiece      != null ? getPieceValue(m2.movedPiece)      : 0);
-            int cap1 = (m1.capturedPiece != null ? getPieceValue(m1.capturedPiece) : 0);
-            int mov1 = (m1.movedPiece      != null ? getPieceValue(m1.movedPiece)      : 0);
-            return (cap2 - mov2) - (cap1 - mov1);
-        });
-
+        List<Move> caps = generateCaptures(board, maxPlayer);
         for (Move m : caps) {
             makeMove(board, m, maxPlayer);
             int score = quiesce(board, !maxPlayer, alpha, beta);
@@ -357,7 +346,6 @@ public class ChessAI {
                 beta = Math.min(beta, score);
             }
         }
-
         return maxPlayer ? alpha : beta;
     }
 
@@ -389,121 +377,183 @@ public class ChessAI {
             historyHeuristic[m.fromIndex()][m.toIndex()] += depth*depth;
     }
 
-    public List<Move> generateAllMoves(
-            Board board, boolean isWhite, int depth, Move pv
-    ) {
+    public List<Move> generateAllMoves(Board board, boolean isWhite, int depth, Move pv) {
         List<Move> moves = new ArrayList<>();
-        Map<Move,Integer> scores = new HashMap<>();
-        Piece[][] arr = board.board;
-
-        for (int r=0;r<8;r++) for (int c=0;c<8;c++){
-            Piece p = arr[r][c];
-            if (p==null || p.isWhite()!=isWhite) continue;
-
-            for (int tr=0;tr<8;tr++) for (int tc=0;tc<8;tc++){
-                if (!p.isValidMove(tr,tc,arr)) continue;
-                Piece cap = arr[tr][tc];
-
-                if (p instanceof Pawn && (tr == 0 || tr == 7)) {
-                    Piece[] promos = {
-                            new Queen(isWhite, tr, tc),
-                            new Rook (isWhite, tr, tc),
-                            new Bishop(isWhite, tr, tc),
-                            new Knight(isWhite, tr, tc)
-                    };
-                    for (Piece promo : promos) {
-                        Move m = new Move(r, c, tr, tc, p, cap, promo);
-                        if (!makeMove(board, m, isWhite)) continue;
-                        int sc = 0;
-                        if (pv != null && m == pv) sc += PV_BONUS;
-                        if (cap != null)
-                            sc += 10_000 + getPieceValue(cap) - getPieceValue(p);
-                        else if (board.isInCheck(!isWhite))
-                            sc += 5_000;
-                        int d = depth - 1;
-                        if (killerMoves[0][d] == m) sc += KILLER1_BONUS;
-                        if (killerMoves[1][d] == m) sc += KILLER2_BONUS;
-                        sc += historyHeuristic[m.fromIndex()][m.toIndex()];
-                        sc += CENTER_CONTROL_BONUS[tr][tc];
-                        moves.add(m);
-                        scores.put(m, sc);
-                        undoMove(board, m);
-                    }
-                    continue;
-                }
-
-                Move m = new Move(r, c, tr, tc, p, cap);
-                if (!makeMove(board, m, isWhite)) continue;
-                int sc = 0;
-                if (pv != null && m == pv) sc += PV_BONUS;
-                if (cap != null)
-                    sc += 10_000 + getPieceValue(cap) - getPieceValue(p);
-                else if (board.isInCheck(!isWhite))
-                    sc += 5_000;
-                if (depth > 0) {
-                    int d = depth - 1;
-                    if (killerMoves[0][d] == m) sc += KILLER1_BONUS;
-                    if (killerMoves[1][d] == m) sc += KILLER2_BONUS;
-                    sc += historyHeuristic[m.fromIndex()][m.toIndex()];
-                }
-                sc += CENTER_CONTROL_BONUS[tr][tc];
-                moves.add(m);
-                scores.put(m, sc);
-                undoMove(board, m);
-            }
-
-            if (p instanceof King) {
-                if (board.canCastle(isWhite, +1)) {
-                    Move m = new Move(r, c, r, c + 2, p, null);
-                    if (makeMove(board, m, isWhite)) {
-                        int sc = PV_BONUS;
-                        moves.add(m);
-                        scores.put(m, sc);
-                        undoMove(board, m);
-                    }
-                }
-                if (board.canCastle(isWhite, -1)) {
-                    Move m = new Move(r, c, r, c - 2, p, null);
-                    if (makeMove(board, m, isWhite)) {
-                        int sc = PV_BONUS;
-                        moves.add(m);
-                        scores.put(m, sc);
-                        undoMove(board, m);
-                    }
+        // 1) generate raw moves
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                Piece p = board.board[r][c];
+                if (p == null || p.isWhite() != isWhite) continue;
+                if (p instanceof Pawn) {
+                    addPawnMoves(board, (Pawn)p, moves);
+                } else if (p instanceof Knight) {
+                    addJumpMoves(board, p, moves, KNIGHT_JUMPS);
+                } else if (p instanceof Bishop) {
+                    addSlideMoves(board, p, moves, BISHOP_DIRS);
+                } else if (p instanceof Rook) {
+                    addSlideMoves(board, p, moves, ROOK_DIRS);
+                } else if (p instanceof Queen) {
+                    addSlideMoves(board, p, moves, QUEEN_DIRS);
+                } else if (p instanceof King) {
+                    addJumpMoves(board, p, moves, KING_STEPS);
+                    addCastleMoves(board, (King)p, moves);
                 }
             }
         }
 
-        moves.sort((m1, m2) -> scores.get(m2) - scores.get(m1));
+        // 2) score & sort exactly as before
+        Map<Move,Integer> scores = new HashMap<>();
+        for (Move m : moves) {
+            int sc = 0;
+            // PV bonus
+            if (pv != null && m == pv) sc += PV_BONUS;
+            // MVV/LVA or check bonus
+            if (m.capturedPiece != null) {
+                sc += 10_000 + getPieceValue(m.capturedPiece) - getPieceValue(m.movedPiece);
+            } else if (board.isInCheck(!isWhite)) {
+                sc += 5_000;
+            }
+            // killer & history
+            if (depth > 0) {
+                int d = depth - 1;
+                if (killerMoves[0][d] == m) sc += KILLER1_BONUS;
+                if (killerMoves[1][d] == m) sc += KILLER2_BONUS;
+                sc += historyHeuristic[m.fromIndex()][m.toIndex()];
+            }
+            // center control
+            sc += CENTER_CONTROL_BONUS[m.toRow][m.toCol];
+            scores.put(m, sc);
+        }
+        moves.sort((m1,m2) -> scores.get(m2) - scores.get(m1));
         return moves;
+    }
+
+    private void addPawnMoves(Board board, Pawn p, List<Move> moves) {
+        int r = p.getRow(), c = p.getCol(), dir = p.isWhite() ? -1 : +1;
+        int tr = r + dir;
+        // single push
+        if (inBounds(tr,c) && board.board[tr][c] == null) {
+            addPawnPromo(p, r, c, tr, c, null, moves);
+            // double
+            if ((p.isWhite() && r == 6 || !p.isWhite() && r == 1)
+                    && board.board[r + 2*dir][c] == null) {
+                moves.add(new Move(r, c, r + 2*dir, c, p, null));
+            }
+        }
+        // captures
+        for (int dc = -1; dc <= 1; dc += 2) {
+            int tc = c + dc;
+            if (!inBounds(tr,tc)) continue;
+            Piece occ = board.board[tr][tc];
+            if (occ != null && occ.isWhite() != p.isWhite()) {
+                addPawnPromo(p, r, c, tr, tc, occ, moves);
+            }
+        }
+    }
+    private void addPawnPromo(Pawn p, int fr, int fc, int tr, int tc,
+                              Piece cap, List<Move> moves) {
+        if (tr == 0 || tr == 7) {
+            moves.add(new Move(fr,fc,tr,tc,p,cap,new Queen (p.isWhite(),tr,tc)));
+            moves.add(new Move(fr,fc,tr,tc,p,cap,new Rook  (p.isWhite(),tr,tc)));
+            moves.add(new Move(fr,fc,tr,tc,p,cap,new Bishop(p.isWhite(),tr,tc)));
+            moves.add(new Move(fr,fc,tr,tc,p,cap,new Knight(p.isWhite(),tr,tc)));
+        } else {
+            moves.add(new Move(fr,fc,tr,tc,p,cap));
+        }
+    }
+
+    private void addJumpMoves(Board board, Piece p,
+                              List<Move> moves, int[][] jumps) {
+        int r = p.getRow(), c = p.getCol();
+        for (int[] d : jumps) {
+            int tr = r + d[0], tc = c + d[1];
+            if (!inBounds(tr,tc)) continue;
+            Piece occ = board.board[tr][tc];
+            if (occ == null || occ.isWhite() != p.isWhite()) {
+                moves.add(new Move(r, c, tr, tc, p, occ));
+            }
+        }
+    }
+
+    private void addSlideMoves(Board board, Piece p,
+                               List<Move> moves, int[][] dirs) {
+        int r = p.getRow(), c = p.getCol();
+        for (int[] d : dirs) {
+            for (int tr = r + d[0], tc = c + d[1];
+                 inBounds(tr,tc);
+                 tr += d[0], tc += d[1]) {
+                Piece occ = board.board[tr][tc];
+                if (occ == null) {
+                    moves.add(new Move(r, c, tr, tc, p, null));
+                } else {
+                    if (occ.isWhite() != p.isWhite()) {
+                        moves.add(new Move(r, c, tr, tc, p, occ));
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    public List<Move> generateCaptures(Board board, boolean isWhite) {
+        List<Move> caps = new ArrayList<>();
+        for (Move m : generateAllMoves(board, isWhite, 0, null)) {
+            if (m.capturedPiece != null) caps.add(m);
+        }
+        return caps;
+    }
+
+
+    private void addCastleMoves(Board board, King k, List<Move> moves) {
+        boolean w = k.isWhite();
+        int row = w ? 7 : 0;
+        if (board.canCastle(w, +1)) moves.add(new Move(row,4,row,6,k,null));
+        if (board.canCastle(w, -1)) moves.add(new Move(row,4,row,2,k,null));
+    }
+
+    public void initializeHash(Board board, boolean whiteToMove) {
+        currentHash = computeZobrist(board, whiteToMove);
     }
 
     private boolean makeMove(Board board, Move m, boolean isWhite) {
         Piece piece = m.movedPiece;
+        int fromIdx = m.fromIndex();
+        int toIdx   = m.toIndex();
 
+        // --- remove side-to-move to flip after move ---
+        currentHash ^= ZOBRIST_SIDE_TO_MOVE;
+
+        // --- CASTLING ---
         if (piece instanceof King && Math.abs(m.toCol - m.fromCol) == 2) {
             int dir = (m.toCol > m.fromCol) ? 1 : -1;
             if (!board.canCastle(isWhite, dir)) {
+                // restore side-to-move
+                currentHash ^= ZOBRIST_SIDE_TO_MOVE;
                 return false;
             }
 
+            // XOR out king from & rook from
+            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(piece)][fromIdx];
+            int rookFrom = (dir == 1 ? 7 : 0);
+            int rookTo   = m.fromCol + dir;
+            Piece rook   = board.board[m.toRow][rookFrom];
+            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(rook)][m.toRow*8 + rookFrom];
+
+            // make the move on board
             board.board[m.toRow][m.toCol]   = piece;
             board.board[m.fromRow][m.fromCol] = null;
             piece.move(m.toRow, m.toCol);
 
-            int rookFrom = (dir == 1 ? 7 : 0);
-            int rookTo   = m.fromCol + dir;
-            Piece rook   = board.board[m.toRow][rookFrom];
             board.board[m.toRow][rookTo]   = rook;
             board.board[m.toRow][rookFrom] = null;
-            if (rook instanceof Rook) {
-                ((Rook) rook).move(m.toRow, rookTo);
-            }
+            if (rook instanceof Rook) ((Rook) rook).move(m.toRow, rookTo);
 
             ((King) piece).setHasMoved(true);
-            if (rook instanceof Rook) {
-                ((Rook) rook).setHasMoved(true);
-            }
+            if (rook instanceof Rook) ((Rook) rook).setHasMoved(true);
+
+            // XOR in king to & rook to
+            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(piece)][toIdx];
+            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(rook)][m.toRow*8 + rookTo];
 
             if (board.isInCheck(isWhite)) {
                 undoMove(board, m);
@@ -512,14 +562,33 @@ public class ChessAI {
             return true;
         }
 
+        // --- non-castle valid test ---
         if (!piece.isValidMove(m.toRow, m.toCol, board.board)) {
+            // restore side-to-move
+            currentHash ^= ZOBRIST_SIDE_TO_MOVE;
             return false;
         }
-        if (m.promotion != null) {
-            board.board[m.toRow][m.toCol] = m.promotion;
-        } else {
-            board.board[m.toRow][m.toCol] = piece;
+
+        // --- XOR out moving piece at from ---
+        currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(piece)][fromIdx];
+
+        // --- handle capture ---
+        if (m.capturedPiece != null) {
+            Piece cap = m.capturedPiece;
+            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(cap)][toIdx];
         }
+
+        // --- handle promotion vs normal move ---
+        if (m.promotion != null) {
+            // promotion: pawn removed from from & promotion added at to
+            board.board[m.toRow][m.toCol] = m.promotion;
+            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(m.promotion)][toIdx];
+        } else {
+            // normal: piece added at to
+            board.board[m.toRow][m.toCol] = piece;
+            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(piece)][toIdx];
+        }
+
         board.board[m.fromRow][m.fromCol] = null;
         piece.setPosition(m.toRow, m.toCol);
 
@@ -530,25 +599,62 @@ public class ChessAI {
         return true;
     }
 
-
     private void undoMove(Board board, Move m) {
-        if (m.movedPiece instanceof King && Math.abs(m.toCol - m.fromCol) == 2) {
+        Piece piece = m.movedPiece;
+        int fromIdx = m.fromIndex();
+        int toIdx   = m.toIndex();
+
+        // --- remove side-to-move to flip back ---
+        currentHash ^= ZOBRIST_SIDE_TO_MOVE;
+
+        // --- CASTLING undo ---
+        if (piece instanceof King && Math.abs(m.toCol - m.fromCol) == 2) {
             int dir      = (m.toCol > m.fromCol) ? 1 : -1;
             int rookTo   = m.fromCol + dir;
             int rookFrom = (dir == 1 ? 7 : 0);
             Piece rook   = board.board[m.toRow][rookTo];
 
-            if (rook instanceof Rook) {
-                board.board[m.toRow][rookFrom] = rook;
-                rook.setPosition(m.toRow, rookFrom);
-                board.board[m.toRow][rookTo]   = null;
+            // XOR out king to & rook to
+            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(piece)][toIdx];
+            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(rook)][m.toRow*8 + rookTo];
 
-                ((Rook) rook).setHasMoved(false);
-            }
+            // put them back
+            ((Rook) rook).setHasMoved(false);
+            board.board[m.toRow][rookFrom] = rook;
+            rook.setPosition(m.toRow, rookFrom);
+            board.board[m.toRow][rookTo]   = null;
 
             ((King) m.movedPiece).setHasMoved(false);
+
+            // XOR in king from & rook from
+            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(piece)][fromIdx];
+            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(rook)][m.toRow*8 + rookFrom];
+
+            // restore board positions
+            board.board[m.fromRow][m.fromCol] = m.movedPiece;
+            m.movedPiece.setPosition(m.fromRow, m.fromCol);
+            board.board[m.toRow][m.toCol] = m.capturedPiece;
+            return;
         }
 
+        // --- normal/promotion undo ---
+
+        // XOR out piece at to (or promotion)
+        if (m.promotion != null) {
+            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(m.promotion)][toIdx];
+        } else {
+            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(piece)][toIdx];
+        }
+
+        // XOR in any captured piece at to
+        if (m.capturedPiece != null) {
+            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(m.capturedPiece)][toIdx];
+        }
+
+        // XOR in moved piece back at from
+        currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(piece)][fromIdx];
+
+        // restore board
         if (m.promotion != null) {
             board.board[m.fromRow][m.fromCol] = m.movedPiece;
             m.movedPiece.setPosition(m.fromRow, m.fromCol);
@@ -556,8 +662,22 @@ public class ChessAI {
             board.board[m.fromRow][m.fromCol] = m.movedPiece;
             m.movedPiece.setPosition(m.fromRow, m.fromCol);
         }
-
         board.board[m.toRow][m.toCol] = m.capturedPiece;
+    }
+
+    // helper to map Piece→Zobrist index (0–11)
+    private int pieceKey(Piece p) {
+        int type = switch(p.getClass().getSimpleName().toLowerCase()) {
+            case "pawn"   -> 0;
+            case "knight" -> 1;
+            case "bishop" -> 2;
+            case "rook"   -> 3;
+            case "queen"  -> 4;
+            case "king"   -> 5;
+            default       -> -1;
+        };
+        int colorOff = p.isWhite() ? 0 : 6;
+        return colorOff + type;
     }
 
     private int evaluateBoard(Board board) {
