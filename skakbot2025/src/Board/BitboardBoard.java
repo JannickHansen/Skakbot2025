@@ -758,16 +758,16 @@ public class BitboardBoard {
 
         // Misc operations.
 
-        if (enPassantSquareCleared(move)) {
+        if (enPassantSquareCleared(move)) { // If the move clears the en passant square...
             if (getPiece(move) == 1 && getFrom(move) / 8 == (white ? 1 : 6) && getTo(move) / 8 == (white ? 3 : 4)) {
-                // If the move is a double pawn push and is being undone, restore or set the en passant square.
-                board[15] = (board[(white ? 3 : 9)] & (1L << getFrom(move))) != 0 ? setEnPassantSquare(board[15], enPassantFile(move) << (white ? 16 : 40)) : setEnPassantSquare(board[15], getFrom(move) + (white ? 8 : -8));
+                // If the move is a double pawn push and is being undone, restore the en passant square, otherwise set it.
+                board[15] = (board[(white ? 3 : 9)] & (1L << getFrom(move))) != 0 ? setEnPassantSquare(board[15], enPassantFile(move) << (white ? 40 : 16)) : setEnPassantSquare(board[15], getFrom(move) + (white ? 8 : -8));
             } else {
                 // Clear the en passant square if already set, otherwise restore it.
-                board[15] = getEnPassantSquare(board[15]) != -1 ? setEnPassantSquare(board[15], -1) : setEnPassantSquare(board[15], enPassantFile(move) << (white ? 16 : 40));
+                board[15] = getEnPassantSquare(board[15]) != -1 ? setEnPassantSquare(board[15], -1) : setEnPassantSquare(board[15], enPassantFile(move) << (white ? 40 : 16));
             }
         } else if (getPiece(move) == 1 && getFrom(move) / 8 == (white ? 1 : 6) && getTo(move) / 8 == (white ? 3 : 4)) {
-            // If the move is a double pawn push and is being undone, clear or set the en passant square.
+            // If the move is a double pawn push and is being undone, clear the en passant square, otherwise set it.
             board[15] = (board[(white ? 3 : 9)] & (1L << getFrom(move))) != 0 ? setEnPassantSquare(board[15], -1) : setEnPassantSquare(board[15], getFrom(move) + (white ? 8 : -8));
         }
 
