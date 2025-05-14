@@ -172,14 +172,9 @@ public class ChessAI {
         if (depth < 0) depth = 0;
 
         boolean winningMaterial = evaluateBoard(board) * (maxPlayer ? 1 : -1) >= 1800;
-        if (depth == 0) {
-            if (rootDepth > 3 && !(winningMaterial || board.isInCheck(maxPlayer))) {
-                int q = quiesce(board, maxPlayer, alpha, beta);
-                return new ScoredMove(null, q);
-            } else {
-                int eval = evaluateBoard(board) * (maxPlayer ? 1 : -1);
-                return new ScoredMove(null, eval);
-            }
+        if (depth == 0 && !(winningMaterial || board.isInCheck(maxPlayer))) {
+            int q = quiesce(board, maxPlayer, alpha, beta);
+            return new ScoredMove(null, q);
         }
 
         long key = computeZobrist(board, maxPlayer);
