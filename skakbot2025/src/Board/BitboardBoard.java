@@ -617,6 +617,9 @@ public static long blackPawnMoves(long[] board) {
         while (pawnMoves != 0L) {
             int targetSquare = Long.numberOfTrailingZeros(pawnMoves);
             int originSquare = white ? targetSquare - 8 : targetSquare + 8;
+            if (((white ? board[3] : board[9]) & 1L << originSquare) == 0L) {
+                originSquare = (white ? originSquare - 8 : originSquare + 8); // Double move.
+            }
             if (white ? targetSquare < 55 : targetSquare > 8) {
                 moves[moveCount++] = encodeMove(originSquare, targetSquare, 1, 0, 0, false, false, false, false, enPassantFile);
             } else {
