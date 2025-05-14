@@ -43,7 +43,7 @@ public class LookupTableGeneration {
             for (int offset : offsets) {
                 int targetSquare = i + offset;
                 if (targetSquare >= 0 && targetSquare < 64) { // Check to see if the move goes out of bounds.
-                    long move = knight << offset;
+                    long move = offset > 0 ? (knight << offset) : (knight >>> -offset);
                     validMoves |= move;
                 }
             }
