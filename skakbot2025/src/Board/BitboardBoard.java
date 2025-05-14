@@ -252,7 +252,7 @@ public static long blackPawnMoves(long[] board) {
     // Do I, strictly speaking, *understand* this? Vaguely at best, but I tested it, and it works, so I'm a happy man.
 
     public static long bishopMoves(int square, long[] board) {
-        return bishopLookupTable[square][(int)((board[0] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square])];
+        return bishopLookupTable[square][(int)((board[0] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square])] & ~board[0];
     }
 
     public static long whiteBishopCaptures(int square, long[] board) {
@@ -269,7 +269,7 @@ public static long blackPawnMoves(long[] board) {
     // Second verse, same as the first.
 
     public static long rookMoves(int square, long[] board) {
-        return rookLookupTable[square][(int)((board[0] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square])];
+        return rookLookupTable[square][(int)((board[0] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square])] & ~board[0];
     }
 
     public static long whiteRookCaptures(int square, long[] board) {
@@ -287,8 +287,8 @@ public static long blackPawnMoves(long[] board) {
     // We simply get the rook and bishop moves for the square and combine them with a bitwise 'OR'.
 
     public static long queenMoves(int square, long[] board) {
-        return rookLookupTable[square][(int)((board[0] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square])] |
-                bishopLookupTable[square][(int)((board[0] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square])];
+        return (rookLookupTable[square][(int)((board[0] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square])] & ~board[0]) |
+                (bishopLookupTable[square][(int)((board[0] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square])] & ~board[0]);
     }
 
     public static long whiteQueenCaptures(int square, long[] board) {
