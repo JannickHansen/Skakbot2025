@@ -68,7 +68,7 @@ public class BitboardBoard {
         board[7] = 0x0000000000000008L; // White queen; 08 = 00001000, or a queen on D1.
         board[8] = 0x0000000000000010L; // White king; 10 = 00010000, or a king on E1.
         board[9] = 0x00FF000000000000L; // Black pawns.
-        board [10] = 0x4200000000000000L; // Black knights.
+        board[10] = 0x4200000000000000L; // Black knights.
         board[11] = 0x2400000000000000L; // Black bishops.
         board[12] = 0x8100000000000000L; // Black rooks.
         board[13] = 0x0800000000000000L; // Black queen.
@@ -80,8 +80,16 @@ public class BitboardBoard {
         return board[index];
     }
 
+    public long[] getFullBoard() {
+        return board;
+    }
+
     public void setBoard(int index, long newValue) {
         board[index] = newValue;
+    }
+
+    public void setFullBoard(long[] newBoard) {
+        System.arraycopy(newBoard, 0, board, 0, board.length);
     }
 
     // TODO: consider changing this and/or adding a version that takes a FEN string.
@@ -101,23 +109,23 @@ public class BitboardBoard {
     // Remember that board[0] is all pieces, board[1] is white pieces, and board[2] is black pieces.
     // Board[3] is white pawns, and board[9] is black pawns.
 
-    public static long whitePawnMoves(long[] board) {
-        long moves = 0L;
-        // Single-square moves.
-        moves |= (board[3] << 8) & ~board[0];
-        // Two-square moves from second rank.
-        moves |= (board[3] << 16) & ~board[0] & ((~board[0] << 8) & 0x000000000000FF00L);
-        return moves;
-    }
+public static long whitePawnMoves(long[] board) {
+    long moves = 0L;
+    // Single-square moves.
+    moves |= (board[3] << 8) & ~board[0];
+    // Two-square moves from the second rank.
+    moves |= ((board[3] & 0x000000000000FF00L) << 16) & ~board[0] & (~board[0] << 8);
+    return moves;
+}
 
-    public static long blackPawnMoves(long[] board) {
-        long moves = 0L;
-        // Single-square moves.
-        moves |= (board[9] >> 8) & ~board[0];
-        // Two-square moves from seventh rank.
-        moves |= (board[9] >> 16) & ~board[0] & ((~board[0] >> 8) & 0x00FF000000000000L);
-        return moves;
-    }
+public static long blackPawnMoves(long[] board) {
+    long moves = 0L;
+    // Single-square moves.
+    moves |= (board[9] >> 8) & ~board[0];
+    // Two-square moves from the seventh rank.
+    moves |= ((board[9] & 0x00FF000000000000L) >> 16) & ~board[0] & (~board[0] >> 8);
+    return moves;
+}
 
     public static long whitePawnRightCaptures(long[] board) {
         return (board[3] << 9) & board[2] & 0x7F7F7F7F7F7F7F7FL;
