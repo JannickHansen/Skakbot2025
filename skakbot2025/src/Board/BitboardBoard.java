@@ -203,19 +203,43 @@ public static long blackPawnMoves(long[] board) {
     // Since there's only ever one king, we can just use the LSB to find the king's position and save a little time with parameter passing.
 
     public static long whiteKingMoves(long[] board) {
+        try {
         return kingLookupTable[Long.numberOfTrailingZeros(board[8])] & ~board[0];
+        } catch (ArrayIndexOutOfBoundsException e) {
+            System.out.println("If you're seeing this, the engine can't find the white king, which probably means black is about to win.");
+        }
+
+        return 0L;
     }
 
     public static long whiteKingCaptures(long[] board) {
+        try {
         return kingLookupTable[Long.numberOfTrailingZeros(board[8])] & board[2];
+        } catch (ArrayIndexOutOfBoundsException e) {
+            System.out.println("If you're seeing this, the engine can't find the white king, which probably means black is about to win.");
+        }
+
+        return 0L;
     }
 
     public static long blackKingMoves(long[] board) {
+        try {
         return kingLookupTable[Long.numberOfTrailingZeros(board[14])] & ~board[0];
+        } catch (ArrayIndexOutOfBoundsException e) {
+            System.out.println("If you're seeing this, the engine can't find the black king, which probably means white is about to win.");
+        }
+
+        return 0L;
     }
 
     public static long blackKingCaptures(long[] board) {
+        try {
         return kingLookupTable[Long.numberOfTrailingZeros(board[14])] & board[1];
+        } catch (ArrayIndexOutOfBoundsException e) {
+            System.out.println("If you're seeing this, the engine can't find the black king, which probably means white is about to win.");
+        }
+
+        return 0L;
     }
 
     // #########################################################################
