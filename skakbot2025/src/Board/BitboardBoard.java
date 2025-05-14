@@ -26,16 +26,16 @@ public class BitboardBoard {
     // For generating all of these lookup tables, we just call the methods in LookupTableGeneration.java.
     // This code *would* have had a bunch of helpful comments, but I had to refactor everything twice, so we're going to need to talk Harrison Ford into doing another Indy sequel to find them.
 
-    static final long[] kingLookupTable = generateKingLookupTable();
-    static final long[] knightLookupTable = generateKnightLookupTable();
-    static final long[] bishopMasks = generateBishopMasks();
-    static long[][] bishopLookupTable = new long[64][];
-    static long[] bishopMagicNumbers = new long[64];
-    static int[] bishopShifts = new int[64];
-    static final long[] rookMasks = generateRookMasks();
-    static long[][] rookLookupTable = new long[64][];
-    static long[] rookMagicNumbers = new long[64];
-    static int[] rookShifts = new int[64];
+    public static final long[] kingLookupTable = generateKingLookupTable();
+    public static final long[] knightLookupTable = generateKnightLookupTable();
+    public static final long[] bishopMasks = generateBishopMasks();
+    public static long[][] bishopLookupTable = new long[64][];
+    public static long[] bishopMagicNumbers = new long[64];
+    public static int[] bishopShifts = new int[64];
+    public static final long[] rookMasks = generateRookMasks();
+    public static long[][] rookLookupTable = new long[64][];
+    public static long[] rookMagicNumbers = new long[64];
+    public static int[] rookShifts = new int[64];
 
 
     public BitboardBoard() {
@@ -47,14 +47,33 @@ public class BitboardBoard {
         long[][] bishopBlockers = enumerateAllBlockerBitboards(bishopMasks);
         long[][] rookBlockers = enumerateAllBlockerBitboards(rookMasks);
 
-        bishopLookupTable = generateBishopAttacks(bishopBlockers);
-        rookLookupTable = generateRookAttacks(rookBlockers);
-
         bishopShifts = getShifts(bishopMasks);
         rookShifts = getShifts(rookMasks);
 
-        bishopMagicNumbers = findMagicNumbers(bishopMasks, bishopBlockers, bishopLookupTable);
-        rookMagicNumbers = findMagicNumbers(rookMasks, rookBlockers, rookLookupTable);
+        long[][] bishopAttacks = generateBishopAttacks(bishopBlockers);
+        long[][] rookAttacks = generateRookAttacks(rookBlockers);
+
+        for (int square = 0; square < 64; square++) {
+            bishopMagicNumbers[square] = findMagicNumber(square, bishopMasks[square], bishopBlockers[square], bishopAttacks[square]);
+            rookMagicNumbers[square] = findMagicNumber(square, rookMasks[square], rookBlockers[square], rookAttacks[square]);
+
+            long[] bishopTable = new long[1 << Long.bitCount(bishopMasks[square])];
+            long[] rookTable = new long[1 << Long.bitCount(rookMasks[square])];
+            Arrays.fill(bishopTable, 0L);
+            Arrays.fill(rookTable, 0L);
+
+            for (int i = 0; i < bishopBlockers[square].length; i++) {
+                int index = (int) (((bishopBlockers[square][i] & bishopMasks[square]) * bishopMagicNumbers[square] >>> bishopShifts[square]));
+                bishopTable[index] = bishopAttacks[square][i];
+            }
+            for (int i = 0; i < rookBlockers[square].length; i++) {
+                int index = (int) (((rookBlockers[square][i] & rookMasks[square]) * rookMagicNumbers[square] >>> rookShifts[square]));
+                rookTable[index] = rookAttacks[square][i];
+            }
+
+            bishopLookupTable[square] = bishopTable;
+            rookLookupTable[square] = rookTable;
+        }
     }
     // Again, remember that the LSB is A1, so the whole board is mirrored along the vertical axis.
     public void initialiseBoard() {

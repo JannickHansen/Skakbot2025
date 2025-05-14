@@ -5,6 +5,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
+import static Board.BitboardBoard.*;
+
 public class LookupTableGeneration {
 
     public static long[] generateKingLookupTable() {
@@ -172,7 +174,7 @@ public class LookupTableGeneration {
         return attacks;
     }
 
-    private static long getRookAttack(int square, long occupancy) {
+    public static long getRookAttack(int square, long occupancy) {
         long attacks = 0L;
         int rank = square / 8;
         int file = square % 8;
@@ -279,22 +281,24 @@ public class LookupTableGeneration {
             if (magicNumbers[square] != 0L) {
                 // Debugging statement; can be removed later.
                 System.out.println("Found magic number for square " + square + ": " + Long.toHexString(magicNumbers[square]));
+                System.out.println((int)((blockerSet[11] & masks[square]) * magicNumbers[square] >>> (64 - Long.bitCount(masks[square])))); // Debugging statement; can be removed later.
             }
         }
         return magicNumbers;
 
     }
 
-    private static long findMagicNumber(int square, long mask, long[] blockerSet, long[] attacks) {
+    public static long findMagicNumber(int square, long mask, long[] blockerSet, long[] attacks) {
         int numBits = Long.bitCount(mask);
         int tableSize = 1 << numBits;
         int shift = 64 - numBits;
 
         Random random = new Random(square); // We set the square as the seed to get consistent results.
-
         // Then we just try a million times to find a magic number that works.
-        for (int attempt = 0; attempt < 1000000; attempt++) {
+        for (int attempt = 0; attempt < 1500000; attempt++) {
             long magicCandidate = generateSparseMagic(random);
+            if (Long.bitCount((magicCandidate * mask) & 0xFF00000000000000L) < 6) continue;
+
             long[] table = new long[tableSize];
             boolean failed = false;
 
@@ -302,7 +306,7 @@ public class LookupTableGeneration {
 
             for (int i = 0; i < blockerSet.length; i++) {
                 long occupancy = blockerSet[i];
-                int index = (int) ((occupancy * magicCandidate) >>> shift);
+                int index = (int) (((occupancy & mask) * magicCandidate) >>> shift);
 
                 if (table[index] == -1L) {
                     table[index] = attacks[i];
