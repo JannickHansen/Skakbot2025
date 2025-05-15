@@ -904,4 +904,9 @@ public static long blackPawnMoves(long[] board) {
         return board;
     }
 
+    static {
+        // once-only: build the sliding‐piece attack tables
+        new BitboardBoard().generateLookupTables();
+    }
+
 }

@@ -6,7 +6,7 @@ public class SimpleEvaluation {
 
     PieceSquareTables tables = new PieceSquareTables();
 
-    int simpleEvaluation(long[] board) {
+    public int simpleEvaluation(long[] board) {
         int evaluation = 0;
         evaluation += materialEvaluation(board);
         evaluation += pieceSquareEvaluation(board);
