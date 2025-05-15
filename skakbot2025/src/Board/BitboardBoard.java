@@ -733,14 +733,15 @@ public static long blackPawnMoves(long[] board) {
     // I know that's not *surprising*, but I just blew my own mind.
     public static long[] makeOrUndoMove(long[] board, int move) {
         boolean white = isWhite(move);
+        int tempEnPassantSquare = (isEnPassant(move) && getEnPassantSquare(board[15]) == -1) ? (enPassantFile(move) + (white ? 40 : 16)) : getEnPassantSquare(board[15]);
         if (white) {
             board[1] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the white pieces.
             board[getPiece(move)+2] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the piece type.
             if (getCaptured(move) != 0) {
                 if (isEnPassant(move)) {
-                    board[0] ^= (1L << getFrom(move)) | (1L << getTo(move) | 1L << getEnPassantSquare(board[15])); // Update the 'all pieces' board.
-                    board[2] ^= (1L << getEnPassantSquare(board[15])); // Update the en passant square on the 'black pieces' board.
-                    board[9] ^= (1L << getEnPassantSquare(board[15])); // Update the en passant square on the 'black pawns' board.
+                    board[0] ^= (1L << getFrom(move)) | (1L << getTo(move) | 1L << (tempEnPassantSquare - 8)); // Update the 'all pieces' board.
+                    board[2] ^= (1L << (tempEnPassantSquare - 8)); // Update the en passant square on the 'black pieces' board.
+                    board[9] ^= (1L << (tempEnPassantSquare - 8)); // Update the en passant square on the 'black pawns' board.
                 } else {
                     board[0] ^= (1L << getFrom(move)); // Update the 'from' square on the 'all pieces' board.
                     board[2] ^= (1L << getTo(move)); // Update the 'to' square on the 'black pieces' board.
@@ -769,9 +770,9 @@ public static long blackPawnMoves(long[] board) {
             board[getPiece(move)+8] ^= (1L << getFrom(move)) | (1L << getTo(move)); // Update the piece type.
             if (getCaptured(move) != 0) {
                 if (isEnPassant(move)) {
-                    board[0] ^= (1L << getFrom(move)) | (1L << getTo(move) | 1L << getEnPassantSquare(board[15])); // Update the 'all pieces' board.
-                    board[1] ^= (1L << getEnPassantSquare(board[15])); // Update the en passant square on the 'white pieces' board.
-                    board[3] ^= (1L << getEnPassantSquare(board[15])); // Update the en passant on the 'white pawns' board.
+                    board[0] ^= (1L << getFrom(move)) | (1L << getTo(move) | 1L << (tempEnPassantSquare + 8)); // Update the 'all pieces' board.
+                    board[1] ^= (1L << (tempEnPassantSquare + 8)); // Update the en passant square on the 'white pieces' board.
+                    board[3] ^= (1L << (tempEnPassantSquare + 8)); // Update the en passant on the 'white pawns' board.
                 } else {
                     board[0] ^= (1L << getFrom(move)); // Update the 'from' square on the 'all pieces' board.
                     board[1] ^= (1L << getTo(move)); // Update the 'to' square on the 'white pieces' board.
@@ -802,10 +803,10 @@ public static long blackPawnMoves(long[] board) {
         if (enPassantSquareCleared(move)) {
             if (getPiece(move) == 1 && getFrom(move) / 8 == (white ? 1 : 6) && getTo(move) / 8 == (white ? 3 : 4)) {
                 // If the move is a double pawn push and is being undone, restore or set the en passant square.
-                board[15] = (board[(white ? 3 : 9)] & (1L << getFrom(move))) != 0 ? setEnPassantSquare(board[15], enPassantFile(move) << (white ? 16 : 40)) : setEnPassantSquare(board[15], getFrom(move) + (white ? 8 : -8));
+                board[15] = (board[(white ? 3 : 9)] & (1L << getFrom(move))) != 0 ? setEnPassantSquare(board[15], enPassantFile(move) + (white ? 40 : 16)) : setEnPassantSquare(board[15], getFrom(move) + (white ? 8 : -8));
             } else {
                 // Clear the en passant square if already set, otherwise restore it.
-                board[15] = getEnPassantSquare(board[15]) != -1 ? setEnPassantSquare(board[15], -1) : setEnPassantSquare(board[15], enPassantFile(move) << (white ? 16 : 40));
+                board[15] = getEnPassantSquare(board[15]) != -1 ? setEnPassantSquare(board[15], -1) : setEnPassantSquare(board[15], enPassantFile(move) + (white ? 40 : 16));
             }
         } else if (getPiece(move) == 1 && getFrom(move) / 8 == (white ? 1 : 6) && getTo(move) / 8 == (white ? 3 : 4)) {
             // If the move is a double pawn push and is being undone, clear or set the en passant square.
