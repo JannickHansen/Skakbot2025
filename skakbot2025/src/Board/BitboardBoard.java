@@ -206,7 +206,6 @@ public static long blackPawnMoves(long[] board) {
         try {
         return kingLookupTable[Long.numberOfTrailingZeros(board[8])] & ~board[0];
         } catch (ArrayIndexOutOfBoundsException e) {
-            System.out.println("If you're seeing this, the engine can't find the white king, which probably means black is about to win.");
         }
 
         return 0L;
@@ -216,7 +215,6 @@ public static long blackPawnMoves(long[] board) {
         try {
         return kingLookupTable[Long.numberOfTrailingZeros(board[8])] & board[2];
         } catch (ArrayIndexOutOfBoundsException e) {
-            System.out.println("If you're seeing this, the engine can't find the white king, which probably means black is about to win.");
         }
 
         return 0L;
@@ -226,7 +224,6 @@ public static long blackPawnMoves(long[] board) {
         try {
         return kingLookupTable[Long.numberOfTrailingZeros(board[14])] & ~board[0];
         } catch (ArrayIndexOutOfBoundsException e) {
-            System.out.println("If you're seeing this, the engine can't find the black king, which probably means white is about to win.");
         }
 
         return 0L;
@@ -236,7 +233,6 @@ public static long blackPawnMoves(long[] board) {
         try {
         return kingLookupTable[Long.numberOfTrailingZeros(board[14])] & board[1];
         } catch (ArrayIndexOutOfBoundsException e) {
-            System.out.println("If you're seeing this, the engine can't find the black king, which probably means white is about to win.");
         }
 
         return 0L;
@@ -395,7 +391,7 @@ public static long blackPawnMoves(long[] board) {
         for (int i = 0; i < 4; i++) {
             miscData |= ((castlingRights[i] ? 1L : 0L) << (i + 1));
         }
-        miscData |= ((enPassantSquare & 0x3F) << 5);
+        miscData |= ((enPassantSquare + 1 & 0x3F) << 5);
         return miscData;
     }
 
@@ -833,11 +829,20 @@ public static long blackPawnMoves(long[] board) {
 
     public static Piece getPieceAtSquare(int square, long[] board) {
         if ((board[0] & (1L << square)) == 0L) return null; // If the square is empty, return null.
+        System.out.println("Square " + square + " is occupied.");
         boolean white = ((board[1] & (1L << square)) != 0L); // If the square is occupied by a white piece, set white to true.
+        System.out.println("White: " + white);
 
-        int pieceType = getPieceType(square, board, white);
-        int rank = square / 8;
-        int file = square % 8;
+        return getPiece(square, board, white);
+    }
+
+    private static Piece getPiece(int square, long[] board, boolean white) {
+        int pieceType = getPieceType(square, board, !white);
+        System.out.println("Piece type: " + pieceType);
+        int rank = 7 - (square / 8);
+        System.out.println("Rank: " + rank);
+        int file = 7 - (square % 8);
+        System.out.println("File: " + file);
 
         Piece p = null;
 
@@ -849,7 +854,6 @@ public static long blackPawnMoves(long[] board) {
             case 5 -> p = new Queen(white, rank, file);
             case 6 -> p = new King(white, rank, file);
         }
-
         return p;
     }
 
@@ -858,11 +862,12 @@ public static long blackPawnMoves(long[] board) {
     public static Board bitboardToBoard(long[] board) {
         Board b = new Board();
         for (int i = 0; i < 64; i++) {
-            int rank = i / 8;
-            int file = i % 8;
-            Piece p = getPieceAtSquare((i ^ 63), board); // The 2D array counts from the top left, but the bitboard counts from the bottom right, so we XOR by 63 to get the opposite square.
+            int rank = 7 - (i / 8);
+            int file = 7 - (i % 8);
+            Piece p = getPieceAtSquare((i ^ 7), board); // The 2D array counts from the top left, but the bitboard counts from the bottom right, so we XOR by 63 to get the opposite square.
             b.board[rank][file] = p;
         }
+
         return b;
     }
 

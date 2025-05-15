@@ -165,7 +165,7 @@ public class ChessAI {
             for (int c = 0; c < 8; c++) {
                 Piece p = b.board[r][c];
                 if (p == null) continue;
-                int sq   = (r*8 + c) ^ 63;   // flip A1→LSB
+                int sq   = (r*8 + c) ^ 56;   // flip A1→LSB
                 long m   = 1L << sq;
                 s[0]    |= m;
                 if (p.isWhite()) s[1] |= m; else s[2] |= m;
