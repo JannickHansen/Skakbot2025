@@ -2,12 +2,6 @@ import Board.Board;
 import Evaluation.SimpleEvaluation;
 import Board.BitboardBoard;
 import Pieces.Piece;
-import Pieces.Pawn;
-import Pieces.Knight;
-import Pieces.Bishop;
-import Pieces.Rook;
-import Pieces.Queen;
-import Pieces.King;
 
 import java.util.*;
 
@@ -16,59 +10,14 @@ public class ChessAI {
     private static final long TIME_LIMIT_NANO = 14_950_000_000L;
     private static final int ASPIRATION_WINDOW_VALUE = 150;
     private static final int MATE_SCORE = 1_000_000;
-
-    private static final int[][] ROOK_DIRS   = {{1,0},{-1,0},{0,1},{0,-1}};
-    private static final int[][] BISHOP_DIRS = {{1,1},{1,-1},{-1,1},{-1,-1}};
-    private static final int[][] QUEEN_DIRS;
-    static {
-        QUEEN_DIRS = new int[ROOK_DIRS.length + BISHOP_DIRS.length][2];
-        System.arraycopy(ROOK_DIRS, 0, QUEEN_DIRS, 0, ROOK_DIRS.length);
-        System.arraycopy(BISHOP_DIRS, 0, QUEEN_DIRS, ROOK_DIRS.length, BISHOP_DIRS.length);
-    }
-    private static final int[][] KNIGHT_JUMPS = {{2,1},{2,-1},{-2,1},{-2,-1},{1,2},{1,-2},{-1,2},{-1,-2}};
-    private static final int[][] KING_STEPS   = QUEEN_DIRS;
-    private static final int[][] CENTER_CONTROL_BONUS = {
-            {0,0,5,5,5,5,0,0},
-            {0,5,10,10,10,10,5,0},
-            {5,10,15,20,20,15,10,5},
-            {5,10,20,25,25,20,10,5},
-            {5,10,20,25,25,20,10,5},
-            {5,10,15,20,20,15,10,5},
-            {0,5,10,10,10,10,5,0},
-            {0,0,5,5,5,5,0,0},
-    };
-    private static final int ENDGAME_PIECE_THRESHOLD = 12;
-    private static final int CHECK_BONUS = 50;
-    private static final int KING_ACTIVITY_WEIGHT    = 20;
-    private static final int MOBILITY_WEIGHT         = 4;
-    private static final int PASSED_PAWN_WEIGHT      = 20;
-    private static final int PV_BONUS      = 1_000_000;
-    private static final int KILLER1_BONUS =   8_000;
-    private static final int KILLER2_BONUS =   7_000;
     private long currentHash;
+    private int totalMovesEvaluated = 0;
+    private int cutoffsMade = 0;
     private static final long[] ZOBRIST_SLICE_KEYS = new long[16];
     static {
         Random rnd = new Random(0xDEADBEEFL);
         for (int i = 0; i < 16; i++) {
             ZOBRIST_SLICE_KEYS[i] = rnd.nextLong();
-        }
-    }
-
-    private static final long[][] ZOBRIST_PIECE_KEYS = new long[12][64];
-    private static final long   ZOBRIST_SIDE_TO_MOVE;
-    static {
-        Random rnd = new Random(0xDEADBEEFL);
-        for (int i = 0; i < 12; i++) {
-            for (int sq = 0; sq < 64; sq++) {
-                ZOBRIST_PIECE_KEYS[i][sq] = rnd.nextLong();
-            }
-        }
-        ZOBRIST_SIDE_TO_MOVE = rnd.nextLong();
-
-        for (int r = 0; r < 8; r++) {
-            for (int c = 0; c < 8; c++) {
-                CENTER_CONTROL_BONUS[r][c] /= 2;
-            }
         }
     }
 
@@ -80,10 +29,6 @@ public class ChessAI {
         }
     }
 
-    private boolean inBounds(int r, int c) {
-        return r >= 0 && r < 8 && c >= 0 && c < 8;
-    }
-
     private static class TTEntry {
         int depth, value, flag;
         int bestMove;
@@ -91,34 +36,6 @@ public class ChessAI {
     private final Map<Long,TTEntry> tt = new HashMap<>();
     private final SimpleEvaluation evaluator = new SimpleEvaluation();
     private long[] boardState;
-
-    private final Move[][] killerMoves       = new Move[2][MAX_DEPTH];
-    private final int[][]   historyHeuristic = new int[64][64];
-
-    private long cutoffCount      = 0;
-    private int  lastDepthReached = 0;
-
-    public static class Move {
-        public final int fromRow, fromCol, toRow, toCol;
-        public final Piece movedPiece, capturedPiece;
-        public final Piece promotion;
-
-        public Move(int fr, int fc, int tr, int tc,
-                    Piece m, Piece c, Piece promotion) {
-            fromRow = fr; fromCol = fc;
-            toRow   = tr; toCol   = tc;
-            movedPiece    = m;
-            capturedPiece = c;
-            this.promotion = promotion;
-        }
-
-        public Move(int fr, int fc, int tr, int tc, Piece m, Piece c) {
-            this(fr,fc,tr,tc,m,c,null);
-        }
-
-        public int fromIndex() { return fromRow*8 + fromCol; }
-        public int toIndex()   { return toRow*8   + toCol;   }
-    }
 
     public void calculateAndMakeMoveAsync(Board board, boolean isWhite, Runnable onMoveComplete) {
         new Thread(() -> {
@@ -141,6 +58,10 @@ public class ChessAI {
                 Board newBoard = BitboardBoard.bitboardToBoard(boardState);
                 board.board   = newBoard.board;
             }
+
+            // informational printout to devs to evaluate quality
+            System.out.println("Total moves evaluated: " + totalMovesEvaluated);
+            System.out.println("Cutoffs made: " + cutoffsMade);
 
             // notify caller
             if (onMoveComplete != null) onMoveComplete.run();
@@ -194,13 +115,14 @@ public class ChessAI {
         for (int depth = 1; depth <= MAX_DEPTH; depth++) {
             if (System.nanoTime() - start > timeLimit) break;
 
-            int alpha = (depth == 1 ? Integer.MIN_VALUE : lastScore - 150);
-            int beta  = (depth == 1 ? Integer.MAX_VALUE : lastScore + 150);
+            // Apply the aspiration window for the first search
+            int alpha = (depth == 1 ? Integer.MIN_VALUE : lastScore - ASPIRATION_WINDOW_VALUE);
+            int beta  = (depth == 1 ? Integer.MAX_VALUE : lastScore + ASPIRATION_WINDOW_VALUE);
 
             ScoredMove sm = minimax(state, depth, alpha, beta, isWhite, start, timeLimit, rootRepeats, depth);
             if (sm == null) break;  // timed out
 
-            // re-search if outside window
+            // Re-search if outside the aspiration window
             if (sm.score <= alpha || sm.score >= beta) {
                 sm = minimax(state, depth, Integer.MIN_VALUE, Integer.MAX_VALUE,
                         isWhite, start, timeLimit, rootRepeats, depth);
@@ -229,6 +151,7 @@ public class ChessAI {
         if (System.nanoTime() - start > timeLimit) return null;
 
         if (depth == 0) {
+            totalMovesEvaluated++;
             int stand = evaluator.simpleEvaluation(state);
             return new ScoredMove(-1, stand);
         }
@@ -238,7 +161,10 @@ public class ChessAI {
             if (ent.flag == 0) return new ScoredMove(ent.bestMove, ent.value);
             if (ent.flag == 1) alpha = Math.max(alpha, ent.value);
             if (ent.flag == 2) beta  = Math.min(beta, ent.value);
-            if (alpha >= beta) return new ScoredMove(ent.bestMove, ent.value);
+            if (alpha >= beta) {
+                cutoffsMade++;
+                return new ScoredMove(ent.bestMove, ent.value);
+            }
         }
 
         if (depth == rootDepth) {
@@ -303,168 +229,4 @@ public class ChessAI {
         return h;
     }
 
-    private boolean makeMove(Board board, Move m, boolean isWhite) {
-        Piece piece = m.movedPiece;
-        int fromIdx = m.fromIndex();
-        int toIdx   = m.toIndex();
-
-        // --- remove side-to-move to flip after move ---
-        currentHash ^= ZOBRIST_SIDE_TO_MOVE;
-
-        // --- CASTLING ---
-        if (piece instanceof King && Math.abs(m.toCol - m.fromCol) == 2) {
-            int dir = (m.toCol > m.fromCol) ? 1 : -1;
-            if (!board.canCastle(isWhite, dir)) {
-                // restore side-to-move
-                currentHash ^= ZOBRIST_SIDE_TO_MOVE;
-                return false;
-            }
-
-            // XOR out king from & rook from
-            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(piece)][fromIdx];
-            int rookFrom = (dir == 1 ? 7 : 0);
-            int rookTo   = m.fromCol + dir;
-            Piece rook   = board.board[m.toRow][rookFrom];
-            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(rook)][m.toRow*8 + rookFrom];
-
-            // make the move on board
-            board.board[m.toRow][m.toCol]   = piece;
-            board.board[m.fromRow][m.fromCol] = null;
-            piece.move(m.toRow, m.toCol);
-
-            board.board[m.toRow][rookTo]   = rook;
-            board.board[m.toRow][rookFrom] = null;
-            if (rook instanceof Rook) ((Rook) rook).move(m.toRow, rookTo);
-
-            ((King) piece).setHasMoved(true);
-            if (rook instanceof Rook) ((Rook) rook).setHasMoved(true);
-
-            // XOR in king to & rook to
-            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(piece)][toIdx];
-            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(rook)][m.toRow*8 + rookTo];
-
-            if (board.isInCheck(isWhite)) {
-                undoMove(board, m);
-                return false;
-            }
-            return true;
-        }
-
-        // --- non-castle valid test ---
-        if (!piece.isValidMove(m.toRow, m.toCol, board.board)) {
-            // restore side-to-move
-            currentHash ^= ZOBRIST_SIDE_TO_MOVE;
-            return false;
-        }
-
-        // --- XOR out moving piece at from ---
-        currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(piece)][fromIdx];
-
-        // --- handle capture ---
-        if (m.capturedPiece != null) {
-            Piece cap = m.capturedPiece;
-            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(cap)][toIdx];
-        }
-
-        // --- handle promotion vs normal move ---
-        if (m.promotion != null) {
-            // promotion: pawn removed from from & promotion added at to
-            board.board[m.toRow][m.toCol] = m.promotion;
-            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(m.promotion)][toIdx];
-        } else {
-            // normal: piece added at to
-            board.board[m.toRow][m.toCol] = piece;
-            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(piece)][toIdx];
-        }
-
-        board.board[m.fromRow][m.fromCol] = null;
-        piece.setPosition(m.toRow, m.toCol);
-
-        if (board.isInCheck(isWhite)) {
-            undoMove(board, m);
-            return false;
-        }
-        return true;
-    }
-
-    private void undoMove(Board board, Move m) {
-        Piece piece = m.movedPiece;
-        int fromIdx = m.fromIndex();
-        int toIdx   = m.toIndex();
-
-        // --- remove side-to-move to flip back ---
-        currentHash ^= ZOBRIST_SIDE_TO_MOVE;
-
-        // --- CASTLING undo ---
-        if (piece instanceof King && Math.abs(m.toCol - m.fromCol) == 2) {
-            int dir      = (m.toCol > m.fromCol) ? 1 : -1;
-            int rookTo   = m.fromCol + dir;
-            int rookFrom = (dir == 1 ? 7 : 0);
-            Piece rook   = board.board[m.toRow][rookTo];
-
-            // XOR out king to & rook to
-            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(piece)][toIdx];
-            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(rook)][m.toRow*8 + rookTo];
-
-            // put them back
-            ((Rook) rook).setHasMoved(false);
-            board.board[m.toRow][rookFrom] = rook;
-            rook.setPosition(m.toRow, rookFrom);
-            board.board[m.toRow][rookTo]   = null;
-
-            ((King) m.movedPiece).setHasMoved(false);
-
-            // XOR in king from & rook from
-            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(piece)][fromIdx];
-            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(rook)][m.toRow*8 + rookFrom];
-
-            // restore board positions
-            board.board[m.fromRow][m.fromCol] = m.movedPiece;
-            m.movedPiece.setPosition(m.fromRow, m.fromCol);
-            board.board[m.toRow][m.toCol] = m.capturedPiece;
-            return;
-        }
-
-        // --- normal/promotion undo ---
-
-        // XOR out piece at to (or promotion)
-        if (m.promotion != null) {
-            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(m.promotion)][toIdx];
-        } else {
-            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(piece)][toIdx];
-        }
-
-        // XOR in any captured piece at to
-        if (m.capturedPiece != null) {
-            currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(m.capturedPiece)][toIdx];
-        }
-
-        // XOR in moved piece back at from
-        currentHash ^= ZOBRIST_PIECE_KEYS[pieceKey(piece)][fromIdx];
-
-        // restore board
-        if (m.promotion != null) {
-            board.board[m.fromRow][m.fromCol] = m.movedPiece;
-            m.movedPiece.setPosition(m.fromRow, m.fromCol);
-        } else {
-            board.board[m.fromRow][m.fromCol] = m.movedPiece;
-            m.movedPiece.setPosition(m.fromRow, m.fromCol);
-        }
-        board.board[m.toRow][m.toCol] = m.capturedPiece;
-    }
-
-    // helper to map Piece→Zobrist index (0–11)
-    private int pieceKey(Piece p) {
-        int type = switch(p.getClass().getSimpleName().toLowerCase()) {
-            case "pawn"   -> 0;
-            case "knight" -> 1;
-            case "bishop" -> 2;
-            case "rook"   -> 3;
-            case "queen"  -> 4;
-            case "king"   -> 5;
-            default       -> -1;
-        };
-        int colorOff = p.isWhite() ? 0 : 6;
-        return colorOff + type;
-    }
 }
