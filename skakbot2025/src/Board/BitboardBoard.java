@@ -841,7 +841,7 @@ public static long blackPawnMoves(long[] board) {
         System.out.println("Piece type: " + pieceType);
         int rank = 7 - (square / 8);
         System.out.println("Rank: " + rank);
-        int file = 7 - (square % 8);
+        int file = square % 8;
         System.out.println("File: " + file);
 
         Piece p = null;
@@ -862,9 +862,9 @@ public static long blackPawnMoves(long[] board) {
     public static Board bitboardToBoard(long[] board) {
         Board b = new Board();
         for (int i = 0; i < 64; i++) {
-            int rank = 7 - (i / 8);
-            int file = 7 - (i % 8);
-            Piece p = getPieceAtSquare((i ^ 7), board); // The 2D array counts from the top left, but the bitboard counts from the bottom right, so we XOR by 63 to get the opposite square.
+            int rank = 7 - (i / 8); // Get the opposite rank.
+            int file = i % 8;
+            Piece p = getPieceAtSquare((i), board);
             b.board[rank][file] = p;
         }
 
