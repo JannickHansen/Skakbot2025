@@ -147,19 +147,19 @@ public static long blackPawnMoves(long[] board) {
 }
 
     public static long whitePawnRightCaptures(long[] board) {
-        return (board[3] << 9) & board[2] & 0xFEFEFEFEFEFEFEFEL;
+        return (board[3] << 9) & board[2] & 0x7F7F7F7F7F7F7F7FL;
     }
 
     public static long whitePawnLeftCaptures(long[] board){
-        return (board[3] << 7) & board[2] & 0x7F7F7F7F7F7F7F7FL;
+        return (board[3] << 7) & board[2] & 0xFEFEFEFEFEFEFEFEL;
     }
 
     public static long blackPawnRightCaptures(long[] board) {
-        return (board[9] >> 9) & board[1] & 0xFEFEFEFEFEFEFEFEL;
+        return (board[9] >> 9) & board[1] & 0x7F7F7F7F7F7F7F7FL;
     }
 
     public static long blackPawnLeftCaptures(long[] board) {
-        return (board[9] >> 7) & board[1] & 0x7F7F7F7F7F7F7F7FL;
+        return (board[9] >> 7) & board[1] & 0xFEFEFEFEFEFEFEFEL;
     }
 
     public static long whitePawnRightEnPassant(long[] board) {
@@ -829,20 +829,15 @@ public static long blackPawnMoves(long[] board) {
 
     public static Piece getPieceAtSquare(int square, long[] board) {
         if ((board[0] & (1L << square)) == 0L) return null; // If the square is empty, return null.
-        System.out.println("Square " + square + " is occupied.");
         boolean white = ((board[1] & (1L << square)) != 0L); // If the square is occupied by a white piece, set white to true.
-        System.out.println("White: " + white);
 
         return getPiece(square, board, white);
     }
 
     private static Piece getPiece(int square, long[] board, boolean white) {
         int pieceType = getPieceType(square, board, !white);
-        System.out.println("Piece type: " + pieceType);
         int rank = 7 - (square / 8);
-        System.out.println("Rank: " + rank);
         int file = square % 8;
-        System.out.println("File: " + file);
 
         Piece p = null;
 
