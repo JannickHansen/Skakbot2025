@@ -6,9 +6,9 @@ import Pieces.Piece;
 import java.util.*;
 
 public class ChessAI {
-    private static final int MAX_DEPTH = 15;
+    private static final int MAX_DEPTH =30;
     private static final long TIME_LIMIT_NANO = 14_950_000_000L;
-    private static final int ASPIRATION_WINDOW_VALUE = 150;
+    private static final int ASPIRATION_WINDOW_VALUE = 1000;
     private static final int MATE_SCORE = 1_000_000;
     private long currentHash;
     private int totalMovesEvaluated = 0;
