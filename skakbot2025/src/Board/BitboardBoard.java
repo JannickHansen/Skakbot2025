@@ -198,8 +198,6 @@ public static long blackPawnMoves(long[] board) {
     // you almost immediately run into the upper limit of Java method sizes of 64KB.
     // Because yeah, Rook attack tables *will* take up thousands of 64-bit integers.
 
-    // TODO: castling.
-
     // Since there's only ever one king, we can just use the LSB to find the king's position and save a little time with parameter passing.
 
     public static long whiteKingMoves(long[] board) {
@@ -455,37 +453,46 @@ public static long blackPawnMoves(long[] board) {
     }
 
     // For checking castling rights.
-    public static long getAllAttacks(long[] board, boolean white) {
-        long attacks = 0L;
+    public static long[] getAllAttacks(long[] board, boolean white) {
+        long[] attacks = new long[7];
 
-        attacks |= white ? whiteKingCaptures(board) : blackKingCaptures(board);
-        attacks |= white ? whitePawnLeftCaptures(board) : blackPawnLeftCaptures(board);
-        attacks |= white ? whitePawnRightCaptures(board) : blackPawnRightCaptures(board);
+        attacks[1] |= white ? whitePawnMoves(board) : blackPawnMoves(board);
+        attacks[1] |= white ? whitePawnLeftCaptures(board) : blackPawnLeftCaptures(board);
+        attacks[1] |= white ? whitePawnRightCaptures(board) : blackPawnRightCaptures(board);
 
         long knights = white ? board[4] : board[10];
-        for (int i = 0; i < Long.bitCount(knights); i++) {
+        while (knights != 0L) {
             int square = Long.numberOfTrailingZeros(knights);
-            attacks |= white ? whiteKnightCaptures(square, board) : blackKnightCaptures(square, board);
+            attacks[2] |= knightMoves(square, board);
+            attacks[2] |= white ? whiteKnightCaptures(square, board) : blackKnightCaptures(square, board);
             knights &= knights - 1;
         }
         long bishops = white ? board[5] : board[11];
-        for (int i = 0; i < Long.bitCount(bishops); i++) {
+        while (bishops != 0L) {
             int square = Long.numberOfTrailingZeros(bishops);
-            attacks |= white ? whiteBishopCaptures(square, board) : blackBishopCaptures(square, board);
+            attacks[3] |= bishopMoves(square, board);
+            attacks[3] |= white ? whiteBishopCaptures(square, board) : blackBishopCaptures(square, board);
             bishops &= bishops - 1;
         }
         long rooks = white ? board[6] : board[12];
-        for (int i = 0; i < Long.bitCount(rooks); i++) {
+        while (rooks != 0L) {
             int square = Long.numberOfTrailingZeros(rooks);
-            attacks |= white ? whiteRookCaptures(square, board) : blackRookCaptures(square, board);
+            attacks[4] |= rookMoves(square, board);
+            attacks[4] |= white ? whiteRookCaptures(square, board) : blackRookCaptures(square, board);
             rooks &= rooks - 1;
         }
         long queens = white ? board[7] : board[13];
-        for (int i = 0; i < Long.bitCount(queens); i++) {
+        while (queens != 0L) {
             int square = Long.numberOfTrailingZeros(queens);
-            attacks |= white ? whiteQueenCaptures(square, board) : blackQueenCaptures(square, board);
+            attacks[5] |= queenMoves(square, board);
+            attacks[5] |= white ? whiteQueenCaptures(square, board) : blackQueenCaptures(square, board);
             queens &= queens - 1;
         }
+
+        attacks[6] |= white ? whiteKingMoves(board) : blackKingMoves(board);
+        attacks[6] |= white ? whiteKingCaptures(board) : blackKingCaptures(board);
+
+        attacks[0] = attacks[1] | attacks[2] | attacks[3] | attacks[4] | attacks[5] | attacks[6];
 
         return attacks;
     }
@@ -494,7 +501,8 @@ public static long blackPawnMoves(long[] board) {
         // Setting a large size for the array so it won't run out of space.
         int[] moves = new int[256];
         int moveCount = 0;
-        long enemyAttacks = getAllAttacks(board, !white);
+        long[] enemyAttacks = getAllAttacks(board, !white);
+        long allAttacks = enemyAttacks[0];
         boolean[] castlingRights = getCastlingRights(board[15]);
         int enPassantFile = getEnPassantSquare(board[15]) % 8; // Finds the file of the en passant square, which we can then encode into the moves.
 
@@ -616,7 +624,7 @@ public static long blackPawnMoves(long[] board) {
         // Kingside.
         if (white ? castlingRights[0] : castlingRights[2]) {
             boolean pathClear = ((board[0] & (white ? (1L << 5 | 1L << 6) : (1L << 61 | 1L << 62))) == 0L);
-            boolean safeSquares = ((enemyAttacks & (white ? (1L << 4 | 1L << 5 | 1L << 6) : (1L << 60 | 1L << 61 | 1L << 62))) == 0L);
+            boolean safeSquares = ((allAttacks & (white ? (1L << 4 | 1L << 5 | 1L << 6) : (1L << 60 | 1L << 61 | 1L << 62))) == 0L);
 
             if (pathClear && safeSquares) {
                 moves[moveCount++] = encodeMove(white ? 4 : 60, white ? 6 : 62, 6, white, 0, 0, false, true, true, castlingRights[(white ? 1 : 3)], enPassantFile);
@@ -626,7 +634,7 @@ public static long blackPawnMoves(long[] board) {
         // Queenside.
         if (white ? castlingRights[1] : castlingRights[3]) {
             boolean pathClear = ((board[0] & (white ? (1L << 1 | 1L << 2 | 1L << 3) : (1L << 57 | 1L << 58 | 1L << 59))) == 0L);
-            boolean safeSquares = ((enemyAttacks & (white ? (1L << 2 | 1L << 3 | 1L << 4) : (1L << 58 | 1L << 59 | 1L << 60))) == 0L);
+            boolean safeSquares = ((allAttacks & (white ? (1L << 2 | 1L << 3 | 1L << 4) : (1L << 58 | 1L << 59 | 1L << 60))) == 0L);
 
             if (pathClear && safeSquares) {
                 moves[moveCount++] = encodeMove(white ? 4 : 60, white ? 2 : 62, 6, white, 0, 0, false, true, castlingRights[(white ? 0 : 2)], true, enPassantFile);
