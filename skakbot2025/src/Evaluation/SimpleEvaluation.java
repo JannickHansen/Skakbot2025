@@ -155,21 +155,23 @@ public class SimpleEvaluation {
         long[] whiteAttacks = BitboardBoard.getAllAttacks(board, true);
         long[] blackAttacks = BitboardBoard.getAllAttacks(board, false);
 
-        // Reward castling positions:
-        // White king-side castled (king on g1=6, rook on f1=5)
-        if ((board[8] & (1L << 6)) != 0L && (board[6] & (1L << 5)) != 0L) {
+        boolean[] castlingRights = BitboardBoard.getCastlingRights(board[15]);
+
+        // Reward castling positions only if castling has actually occurred (i.e., rights revoked)
+        // White king-side castled
+        if (!castlingRights[0] && (board[8] & (1L << 6)) != 0L && (board[6] & (1L << 5)) != 0L) {
             eval += 50;
         }
-        // White queen-side castled (king on c1=2, rook on d1=3)
-        if ((board[8] & (1L << 2)) != 0L && (board[6] & (1L << 3)) != 0L) {
+        // White queen-side castled
+        if (!castlingRights[1] && (board[8] & (1L << 2)) != 0L && (board[6] & (1L << 3)) != 0L) {
             eval += 50;
         }
-        // Black king-side castled (king on g8=62, rook on f8=61)
-        if ((board[14] & (1L << 62)) != 0L && (board[12] & (1L << 61)) != 0L) {
+        // Black king-side castled
+        if (!castlingRights[2] && (board[14] & (1L << 62)) != 0L && (board[12] & (1L << 61)) != 0L) {
             eval -= 50;
         }
-        // Black queen-side castled (king on c8=58, rook on d8=59)
-        if ((board[14] & (1L << 58)) != 0L && (board[12] & (1L << 59)) != 0L) {
+        // Black queen-side castled
+        if (!castlingRights[3] && (board[14] & (1L << 58)) != 0L && (board[12] & (1L << 59)) != 0L) {
             eval -= 50;
         }
 
