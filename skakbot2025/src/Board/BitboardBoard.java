@@ -383,13 +383,15 @@ public static long blackPawnMoves(long[] board) {
     // Bit 5-11: en passant square. 0 for no en passant, 1-64 for the square. Remember to subtract 1 from the square to get the index.
     // TODO: add move number and half-move clock. Assuming we need them for anything (king evaluation?); we've got plenty of space in the long.
 
-    public static long encodeMiscData(boolean whiteToMove, boolean[] castlingRights, int enPassantSquare) {
+    public static long encodeMiscData(boolean whiteToMove, boolean[] castlingRights, int enPassantSquare, boolean whiteHasCastled, boolean blackHasCastled) {
         long miscData = 0L;
         miscData |= (whiteToMove ? 1L : 0L);
         for (int i = 0; i < 4; i++) {
             miscData |= ((castlingRights[i] ? 1L : 0L) << (i + 1));
         }
         miscData |= ((enPassantSquare + 1 & 0x3F) << 5);
+        miscData |= (whiteHasCastled ? 1L : 0L) << 11;
+        miscData |= (blackHasCastled ? 1L : 0L) << 12;
         return miscData;
     }
 
@@ -424,6 +426,24 @@ public static long blackPawnMoves(long[] board) {
     public static long setEnPassantSquare(long miscData, int square) {
         miscData = (miscData & 0xFFFFFFFFFFFFF81FL) | ((square + 1 & 0x3FL) << 5); // 0xFFFFFFFFFFFFF81FL clears the en passant bits.
         return miscData;
+    }
+
+    public static long setWhiteHasCastled(long miscData, boolean whiteHasCastled) {
+        miscData = (miscData & ~(1L << 11)) | ((whiteHasCastled ? 1L : 0L) << 11);
+        return miscData;
+    }
+
+    public static long setBlackHasCastled(long miscData, boolean blackHasCastled) {
+        miscData = (miscData & ~(1L << 12)) | ((blackHasCastled ? 1L : 0L) << 12);
+        return miscData;
+    }
+
+    public static boolean hasWhiteCastled(long miscData) {
+        return ((miscData >> 11) & 1L) != 0L;
+    }
+
+    public static boolean hasBlackCastled(long miscData) {
+        return ((miscData >> 12) & 1L) != 0L;
     }
 
     // ##########################################################################
@@ -764,6 +784,7 @@ public static long blackPawnMoves(long[] board) {
                     board[1] ^= (1L | 1L << 3); // Update the 'white pieces' board.
                     board[6] ^= (1L | 1L << 3); // Update the white rook board.
                 }
+                board[15] = setWhiteHasCastled(board[15], !hasWhiteCastled(board[15]));
             }
             if (getPromotion(move) != 0) { // If the move is a promotion, update the piece type.
                 board[getPromotion(move)+2] ^= (1L << getTo(move)); // Update the promoted piece on the white piece board.
@@ -795,6 +816,7 @@ public static long blackPawnMoves(long[] board) {
                     board[2] ^= (1L << 56 | 1L << 59); // Update the 'black pieces' board.
                     board[12] ^= (1L << 56 | 1L << 59); // Update the black rook board.
                 }
+                board[15] = setBlackHasCastled(board[15], !hasBlackCastled(board[15]));
             }
             if (getPromotion(move) != 0) { // If the move is a promotion, update the piece type.
                 board[getPromotion(move)+8] ^= (1L << getTo(move)); // Update the promoted piece on the black piece board.

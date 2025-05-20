@@ -155,25 +155,11 @@ public class SimpleEvaluation {
         long[] whiteAttacks = BitboardBoard.getAllAttacks(board, true);
         long[] blackAttacks = BitboardBoard.getAllAttacks(board, false);
 
-        boolean[] castlingRights = BitboardBoard.getCastlingRights(board[15]);
+        if (BitboardBoard.hasWhiteCastled(board[15]))
+            eval += 50;
 
-        // Reward castling positions only if castling has actually occurred (i.e., rights revoked)
-        // White king-side castled
-        if (!castlingRights[0] && (board[8] & (1L << 6)) != 0L && (board[6] & (1L << 5)) != 0L) {
-            eval += 50;
-        }
-        // White queen-side castled
-        if (!castlingRights[1] && (board[8] & (1L << 2)) != 0L && (board[6] & (1L << 3)) != 0L) {
-            eval += 50;
-        }
-        // Black king-side castled
-        if (!castlingRights[2] && (board[14] & (1L << 62)) != 0L && (board[12] & (1L << 61)) != 0L) {
+        if (BitboardBoard.hasBlackCastled(board[15]))
             eval -= 50;
-        }
-        // Black queen-side castled
-        if (!castlingRights[3] && (board[14] & (1L << 58)) != 0L && (board[12] & (1L << 59)) != 0L) {
-            eval -= 50;
-        }
 
         // Mobility: number of attacks per piece type
         int[] multipliers = {1, 3, 4, 3, 2, 1}; // Pawn, knight, bishop, rook, queen, king.
