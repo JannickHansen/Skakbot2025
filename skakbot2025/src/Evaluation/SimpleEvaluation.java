@@ -151,53 +151,30 @@ public class SimpleEvaluation {
     }
 
     int positionalEvaluation(long[] board) {
-        // Combined into one so we only need to check the attacks once.
         int eval = 0;
         long[] whiteAttacks = BitboardBoard.getAllAttacks(board, true);
         long[] blackAttacks = BitboardBoard.getAllAttacks(board, false);
-        boolean[] castlingRights = BitboardBoard.getCastlingRights(board[15]);
 
-
-        // White castling.
-
-        if (castlingRights[0]) {
-            boolean pathClear = ((board[0] & (1L << 5 | 1L << 6)) == 0L);
-            boolean safeSquares = ((blackAttacks[0] & (1L << 4 | 1L << 5 | 1L << 6)) == 0L);
-            if (pathClear && safeSquares) {
-                eval += 50;
-            }
+        // Reward castling positions:
+        // White king-side castled (king on g1=6, rook on f1=5)
+        if ((board[8] & (1L << 6)) != 0L && (board[6] & (1L << 5)) != 0L) {
+            eval += 50;
+        }
+        // White queen-side castled (king on c1=2, rook on d1=3)
+        if ((board[8] & (1L << 2)) != 0L && (board[6] & (1L << 3)) != 0L) {
+            eval += 50;
+        }
+        // Black king-side castled (king on g8=62, rook on f8=61)
+        if ((board[14] & (1L << 62)) != 0L && (board[12] & (1L << 61)) != 0L) {
+            eval -= 50;
+        }
+        // Black queen-side castled (king on c8=58, rook on d8=59)
+        if ((board[14] & (1L << 58)) != 0L && (board[12] & (1L << 59)) != 0L) {
+            eval -= 50;
         }
 
-        if (castlingRights[1]) {
-            boolean pathClear = ((board[0] & (1L << 1 | 1L << 2 | 1L << 3)) == 0L);
-            boolean safeSquares = ((blackAttacks[0] & (1L << 2 | 1L << 3 | 1L << 4)) == 0L);
-            if (pathClear && safeSquares) {
-                eval += 50;
-            }
-        }
-
-        // Black castling.
-
-        if (castlingRights[2]) {
-            boolean pathClear = ((board[0] & (1L << 61 | 1L << 62)) == 0L);
-            boolean safeSquares = ((whiteAttacks[0] & (1L << 60 | 1L << 61 | 1L << 62)) == 0L);
-            if (pathClear && safeSquares) {
-                eval -= 50;
-            }
-        }
-
-        if (castlingRights[3]) {
-            boolean pathClear = ((board[0] & (1L << 57 | 1L << 58 | 1L << 59)) == 0L);
-            boolean safeSquares = ((whiteAttacks[0] & (1L << 58 | 1L << 59 | 1L << 60)) == 0L);
-            if (pathClear && safeSquares) {
-                eval -= 50;
-            }
-        }
-
-        // Number of possible moves by piece type. This version is a bit quick and dirty, since it doesn't factor in multiple pieces of the same type being able to attack the same square, but I imagine the effect is negligible.
-
-        int[] multipliers = {1, 3, 4, 3, 2, 1}; // Pawn, knight, bishop, rook, queen, king. Can be tweaked to fine-tune the weights.
-
+        // Mobility: number of attacks per piece type
+        int[] multipliers = {1, 3, 4, 3, 2, 1}; // Pawn, knight, bishop, rook, queen, king.
         for (int i = 0; i < 6; i++) {
             eval += Long.bitCount(whiteAttacks[i + 1]) * multipliers[i];
             eval -= Long.bitCount(blackAttacks[i + 1]) * multipliers[i];

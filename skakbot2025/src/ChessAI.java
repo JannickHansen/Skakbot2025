@@ -7,17 +7,20 @@ import java.util.*;
 
 public class ChessAI {
     private static final int MAX_DEPTH =30;
-    private static final long TIME_LIMIT_NANO = 14_950_000_000L;
-    private static final int ASPIRATION_WINDOW_VALUE = 1000;
+    private static final long TIME_LIMIT = 14_950_000_000L;
+    // Value set to attempt early cutoffs by not starting at +-∞
+    private static final int ASPIRATION_MARGIN = 1000;
     private static final int MATE_SCORE = 1_000_000;
     private long currentHash;
     private int totalMovesEvaluated = 0;
     private int cutoffsMade = 0;
-    private static final long[] ZOBRIST_SLICE_KEYS = new long[16];
+
+    // A Signature which points at the random 64-bit Zobrist hash keys for each of the 16 bitboard slices
+    private static final long[] ZOBRIST_KEYS = new long[16];
     static {
         Random rnd = new Random(0xDEADBEEFL);
         for (int i = 0; i < 16; i++) {
-            ZOBRIST_SLICE_KEYS[i] = rnd.nextLong();
+            ZOBRIST_KEYS[i] = rnd.nextLong();
         }
     }
 
@@ -29,46 +32,49 @@ public class ChessAI {
         }
     }
 
-    private static class TTEntry {
+    private static class TranspositionTableEntry {
         int depth, value, flag;
         int bestMove;
     }
-    private final Map<Long,TTEntry> tt = new HashMap<>();
+    private final Map<Long,TranspositionTableEntry> TRANSPOSITION_TABLE = new HashMap<>();
     private final SimpleEvaluation evaluator = new SimpleEvaluation();
     private long[] boardState;
 
-    public void calculateAndMakeMoveAsync(Board board, boolean isWhite, Runnable onMoveComplete) {
+    public void startSearchThread(Board board, boolean isWhite, Runnable onMoveComplete) {
         new Thread(() -> {
             // ensure our sliding‐piece tables are built once
             ensureLookupTables();
 
+            // Reset assist counters
+            totalMovesEvaluated = 0;
+            cutoffsMade        = 0;
+
             // pack the GUI Board into our 16‐slice bitboard
             boardState  = boardToBitboard(board, isWhite);
             currentHash = computeZobrist(boardState);
-            tt.clear();
+            TRANSPOSITION_TABLE.clear();
 
-            // run a timed minimax search, giving it the same isWhite
+            // run iterative minimax search with timer applied
             Map<Long,Integer> rootRepeats = new HashMap<>();
             rootRepeats.put(currentHash, 1);
-            int bestEnc = searchWithTimeout(boardState, isWhite, TIME_LIMIT_NANO, rootRepeats);
+            int bestEnc = iterativeDeepeningSearch(boardState, isWhite, TIME_LIMIT, rootRepeats);
 
-            // apply bestEnc, rebuild a fresh 2D Board, stash into GUI
+            // If a move was found, apply it to the bitboard, convert back to 2D, and update the GUI.
             if (bestEnc != -1) {
                 boardState = BitboardBoard.makeOrUndoMove(boardState, bestEnc);
                 Board newBoard = BitboardBoard.bitboardToBoard(boardState);
                 board.board   = newBoard.board;
             }
 
-            // informational printout to devs to evaluate quality
+            // informational printout to devs to evaluate quality (happens only at the end, will not affect algoritmn speed)
             System.out.println("Total moves evaluated: " + totalMovesEvaluated);
             System.out.println("Cutoffs made: " + cutoffsMade);
 
-            // notify caller
+            // let the GUI know we’re done.
             if (onMoveComplete != null) onMoveComplete.run();
         }).start();
     }
 
-    // 2) update your packer to accept that flag
     private long[] boardToBitboard(Board b, boolean whiteToMove) {
         long[] s = new long[16];
         Arrays.fill(s, 0L);
@@ -108,30 +114,34 @@ public class ChessAI {
         return s;
     }
 
-    private int searchWithTimeout(long[] state, boolean isWhite, long timeLimit, Map<Long,Integer> rootRepeats) {
+    private int iterativeDeepeningSearch(long[] state, boolean isWhite, long timeLimit, Map<Long,Integer> rootRepeats) {
         long start = System.nanoTime();
         int lastScore = 0, bestMove = -1;
+        int bestDepth = 0;
 
         for (int depth = 1; depth <= MAX_DEPTH; depth++) {
             if (System.nanoTime() - start > timeLimit) break;
 
-            // Apply the aspiration window for the first search
-            int alpha = (depth == 1 ? Integer.MIN_VALUE : lastScore - ASPIRATION_WINDOW_VALUE);
-            int beta  = (depth == 1 ? Integer.MAX_VALUE : lastScore + ASPIRATION_WINDOW_VALUE);
+            // Apply ASPIRATION_MARGIN
+            int alpha = (depth == 1 ? Integer.MIN_VALUE : lastScore - ASPIRATION_MARGIN);
+            int beta  = (depth == 1 ? Integer.MAX_VALUE : lastScore + ASPIRATION_MARGIN);
 
             ScoredMove sm = minimax(state, depth, alpha, beta, isWhite, start, timeLimit, rootRepeats, depth);
             if (sm == null) break;  // timed out
 
-            // Re-search if outside the aspiration window
+            // Default to +-∞ if ASPIRATION_MARGIN does not find anything
             if (sm.score <= alpha || sm.score >= beta) {
                 sm = minimax(state, depth, Integer.MIN_VALUE, Integer.MAX_VALUE,
                         isWhite, start, timeLimit, rootRepeats, depth);
                 if (sm == null) break;
             }
 
+            bestDepth = depth;
             lastScore = sm.score;
             bestMove  = sm.move;
         }
+
+        System.out.println("Selected move depth: " + bestDepth);
         return bestMove;
     }
 
@@ -156,7 +166,7 @@ public class ChessAI {
             return new ScoredMove(-1, stand);
         }
 
-        TTEntry ent = tt.get(currentHash);
+        TranspositionTableEntry ent = TRANSPOSITION_TABLE.get(currentHash);
         if (ent != null && ent.depth >= depth) {
             if (ent.flag == 0) return new ScoredMove(ent.bestMove, ent.value);
             if (ent.flag == 1) alpha = Math.max(alpha, ent.value);
@@ -181,19 +191,19 @@ public class ChessAI {
         int bestMove  = -1;
 
         for (int m : moves) {
-            // --- make the move (in-place) ---
+            // make the move
             long oldHash = currentHash;
             BitboardBoard.makeOrUndoMove(state, m);
             currentHash = computeZobrist(state);
 
-            // --- search the child ---
+            // search the child
             ScoredMove child = minimax(
                     state, depth-1, alpha, beta,
                     !maxPlayer, start, timeLimit,
                     rootRepeats, rootDepth
             );
 
-            // --- undo the move (same call) ---
+            // undo the move
             BitboardBoard.makeOrUndoMove(state, m);
             currentHash = oldHash;
 
@@ -210,13 +220,13 @@ public class ChessAI {
         }
 
         // store into TT
-        TTEntry ne = new TTEntry();
+        TranspositionTableEntry ne = new TranspositionTableEntry();
         ne.depth    = depth;
         ne.value    = bestScore;
         ne.bestMove = bestMove;
         ne.flag     = ( bestScore <= alpha ? 2 :
                 bestScore >= beta  ? 1 : 0 );
-        tt.put(currentHash, ne);
+        TRANSPOSITION_TABLE.put(currentHash, ne);
 
         return new ScoredMove(bestMove, bestScore);
     }
@@ -224,9 +234,8 @@ public class ChessAI {
     private long computeZobrist(long[] state) {
         long h = 0;
         for (int i = 0; i < 16; i++) {
-            h ^= state[i] * ZOBRIST_SLICE_KEYS[i];
+            h ^= state[i] * ZOBRIST_KEYS[i];
         }
         return h;
     }
-
 }

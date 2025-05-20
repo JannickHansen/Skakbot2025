@@ -312,7 +312,7 @@ public class ChessGUI {
     }
 
     public void triggerBlackAIMove() {
-        ai.calculateAndMakeMoveAsync(boardModel, false, () -> {
+        ai.startSearchThread(boardModel, false, () -> {
             SwingUtilities.invokeLater(() -> {
                 updateBoard();
                 whiteTurn = true;
@@ -324,7 +324,7 @@ public class ChessGUI {
     }
 
     public void triggerWhiteAIMove() {
-        ai.calculateAndMakeMoveAsync(boardModel, true, () -> {
+        ai.startSearchThread(boardModel, true, () -> {
             SwingUtilities.invokeLater(() -> {
                 updateBoard();
                 whiteTurn = false;
